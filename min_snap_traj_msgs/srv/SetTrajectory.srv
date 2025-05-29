@@ -1,0 +1,5 @@
+# Set trajectory through a series of waypoints
+
+min_snap_traj_msgs/WaypointArray waypoints
+---
+float64 duration
