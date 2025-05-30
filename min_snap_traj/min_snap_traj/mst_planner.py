@@ -6,7 +6,11 @@ from rclpy.node import Node
 
 from typing import List
 
+import cvxpy as cp
+
 import min_snap_traj.mst as mst
+from min_snap_traj_msgs.msg import Waypoint
+from min_snap_traj_msgs.srv import SetTrajectory
 
 
 class MSTPlanner(Node):
@@ -16,9 +20,24 @@ class MSTPlanner(Node):
         super().__init__("mst_planner")
         self.get_logger().info("Minimum Snap Trajectory Planner Node has been started.")
 
-        self.waypoints: List[mst.Point] | None = None
+        self.opt_poly_coeffs: cp.Variable | None = None
         self.time_knots: List[float] | None = None
 
+        # Services
+        self.set_trajectory_srv = self.create_service(
+            SetTrajectory,
+            "mst_planner/set_trajectory",
+            self._set_trajectory_callback,
+        )
+
+    def _set_trajectory_callback(self, request, response):
+        self.get_logger().debug("Received SetTrajectory request.")
+        waypoints: List[List[float]] = []
+        wp: Waypoint
+        for wp in request.waypoints:
+            waypoints.append([wp.timestamp, wp.x, wp.y, wp.z, wp.yaw])
+        self.get_logger().debug(f"Read {len(waypoints)} waypoint(s) from request.")
+        return response
 
 def main(args=None):
     """Main function to run the MST Planner node."""

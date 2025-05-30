@@ -17,6 +17,7 @@
 import numpy as np
 import cvxpy as cp
 from math import factorial
+
 # import matplotlib.pyplot as plt
 
 from typing import List, Tuple
@@ -328,7 +329,7 @@ def get_trajectory_minmax(c: cp.Variable, bound_times: List[float]):
 
 
 def main():
-    """Main function to run the minimum snap trajectory optimization."""
+    """Run the minimum snap trajectory optimization."""
     # --- Define the waypoints ---
     wps = [
         [0.0, 0.0, 0.0, 0.0, 0.0],  # Initial waypoint (t, x, y, z, yaw)
@@ -405,6 +406,7 @@ def main():
     # ax2.grid()
     # plt.tight_layout()
     # plt.show()
+
 
 if __name__ == "__main__":
     main()

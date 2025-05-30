@@ -6,3 +6,12 @@ log/*
 # Python
 __pycache__/
 .venv*/
+
+# VS Code
+.vscode/
+
+# Docker
+.devcontainer/
+
+# Other
+logs/

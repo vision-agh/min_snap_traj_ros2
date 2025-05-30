@@ -1,5 +1,5 @@
 # Set trajectory through a series of waypoints
 
-min_snap_traj_msgs/WaypointArray waypoints
+min_snap_traj_msgs/Waypoint[] waypoints
 ---
 float64 duration
