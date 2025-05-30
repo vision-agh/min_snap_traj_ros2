@@ -1,0 +1,8 @@
+# ROS2 workspace
+build/*
+install/*
+log/*
+
+# Python
+__pycache__/
+.venv*/
