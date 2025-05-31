@@ -1,18 +1,26 @@
 """Minimum Snap Trajectory generation."""
 
-# ------------------------------------------------------------------------------
-#  Copyright (c) 2025 Hubert Szolc, EVS AGH University of Krakow, Poland
+# -------------------------------------------------------------------------------
+# Copyright (c) 2025 Hubert Szolc, EVS AGH University of Krakow, Poland
 #
-#  Licensed under the MIT License;
-#  you may not use this file except in compliance with the License.
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
 #
-#  You may obtain a copy of the License at
-#  https://opensource.org/licenses/MIT
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
 #
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# ------------------------------------------------------------------------------
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+# -------------------------------------------------------------------------------
 
 import numpy as np
 import cvxpy as cp
@@ -33,19 +41,31 @@ Point = List[
 
 
 def t_vec(t: float, deg: int, deriv: float = 0) -> List[float]:
-    """Generate the n-th derivative of time vector for the polynomial coefficients.
+    """
+    Generate the n-th derivative of time vector for the polynomial coefficients.
 
-    Function generates the n-th derivative of vector of time powers for polynomial coefficients
+    Function generates the n-th derivative of vector of time powers for polynomial coefficients \
     [1, t, t^2, ..., t^N_COEFF-1].
 
-    Args:
-        t (float): The time at which to evaluate the polynomial coefficients.
-        deg (int): The degree of the polynomial.
-        deriv (int): The derivative order to evaluate (0 for position, 1 for velocity, etc.). Default is 0.
-    Raises:
-        ValueError: If deriv is not in the range [0, deg].
-    Returns:
-        List[float]: A list of polynomial coefficients evaluated at time t.
+    Parameters
+    ----------
+    t : float
+        The time at which to evaluate the polynomial coefficients.
+    deg : int
+        The degree of the polynomial.
+    deriv : int, optional
+        The derivative order to evaluate (0 for position, 1 for velocity, etc.). Default is 0.
+
+    Returns
+    -------
+    List[float]
+        A list of polynomial coefficients evaluated at time t.
+
+    Raises
+    ------
+    ValueError
+        If deriv is not in the range [0, deg].
+
     """
     n_coeff = deg + 1
     if deriv < 0 or deriv >= n_coeff:
@@ -56,19 +76,30 @@ def t_vec(t: float, deg: int, deriv: float = 0) -> List[float]:
     return ret_vec
 
 
-def snap_cost_entry(i: int, j: int, t1: float, t2: float):
-    """Calculate the cost entry for the snap cost matrix.
+def snap_cost_entry(i: int, j: int, t1: float, t2: float) -> float:
+    """
+    Calculate the cost entry for the snap cost matrix.
 
-    This function calculates the integral of the polynomial coefficients. It can be used to generate
-    the snap cost matrix for one segment of the trajectory between two time points t1 and t2.
+    This function calculates the integral of the polynomial coefficients. It can be used to \
+    generate the snap cost matrix for one segment of the trajectory between two time points t1 \
+    and t2.
 
-    Args:
-        i (int): The index of the first polynomial coefficient.
-        j (int): The index of the second polynomial coefficient.
-        t1 (float): The start time of the segment.
-        t2 (float): The end time of the segment.
-    Returns:
-        float: The value of the cost entry for the snap cost matrix.
+    Parameters
+    ----------
+    i : int
+        The index of the first polynomial coefficient.
+    j : int
+        The index of the second polynomial coefficient.
+    t1 : float
+        The start time of the segment.
+    t2 : float
+        The end time of the segment.
+
+    Returns
+    -------
+    float
+        The cost entry value for the snap cost matrix.
+
     """
     if i < K_R or j < K_R:
         return 0.0
@@ -78,15 +109,25 @@ def snap_cost_entry(i: int, j: int, t1: float, t2: float):
 
 
 def snap_cost_matrix(t1: float, t2: float) -> np.ndarray:
-    """Generate the snap cost matrix.
+    """
+    Generate the snap cost matrix.
 
-    This function generates the snap cost matrix for a polynomial segment between two time points t1 and t2.
+    This function generates the snap cost matrix for a polynomial segment between two time points \
+    t1 and t2.
 
-    Args:
-        t1 (float): The start time of the segment.
-        t2 (float): The end time of the segment.
-    Returns:
-        np.ndarray: The snap cost matrix of shape (N_COEFF, N_COEFF).
+    Parameters
+    ----------
+    t1 : float
+        The start time of the segment.
+    t2 : float
+        The end time of the segment.
+
+    Returns
+    -------
+    np.ndarray
+        A square matrix of shape (N_COEFF, N_COEFF) representing the snap cost for the polynomial \
+        segment.
+
     """
     Q = np.zeros((N_COEFF, N_COEFF))
     for i in range(N_COEFF):
@@ -96,16 +137,25 @@ def snap_cost_matrix(t1: float, t2: float) -> np.ndarray:
 
 
 def snap_cost_block_xyz(t1: float, t2: float) -> np.ndarray:
-    """Generate the snap cost block for given coordinates.
+    """
+    Generate the snap cost block for given coordinates.
 
-    Internally, this function generates snap cost matrices for each coordinate and places them along the diagonal of a
-    larger block matrix.
+    Internally, this function generates snap cost matrices for each coordinate and places them \
+    along the diagonal of a larger block matrix.
 
-    Args:
-        t1 (float): The start time of the segment.
-        t2 (float): The end time of the segment.
-    Returns:
-        np.ndarray: The snap cost block of shape (N_COORDS * N_COEFF, N_COORDS * N_COEFF).
+    Parameters
+    ----------
+    t1 : float
+        The start time of the segment.
+    t2 : float
+        The end time of the segment.
+
+    Returns
+    -------
+    np.ndarray
+        A block matrix of shape (N_COORDS * N_COEFF, N_COORDS * N_COEFF) where each diagonal \
+        block corresponds to the snap cost matrix for the a coordinate between times t1 and t2.
+
     """
     H = np.zeros((N_COORDS * N_COEFF, N_COORDS * N_COEFF))
     for i in range(N_COORDS):
@@ -117,18 +167,25 @@ def snap_cost_block_xyz(t1: float, t2: float) -> np.ndarray:
 
 
 def constraints_block_xyz(t: float, deriv: int = 0) -> np.ndarray:
-    """Generate the constraints block for given coordinates.
+    """
+    Generate the constraints block for given coordinates.
 
-    This function facilitates the creation of the constraints matrix. It generates N_COORDS rows, each containing the
-    time basis vector for the specified derivative order.
+    This function facilitates the creation of the constraints matrix. It generates N_COORDS rows, \
+    each containing the time basis vector for the specified derivative order.
 
-    Args:
-        t (float): The time at which to evaluate the polynomial coefficients.
-        deriv (int): The derivative order to evaluate (0 for position, 1 for velocity, etc.). Default is 0.
-    Returns:
-        np.ndarray: The constraints block of shape (N_COORDS, N_COORDS * N_COEFF).
-    Raises:
-        ValueError: If deriv is not in the range [0, DEG].
+    Parameters
+    ----------
+    t : float
+        The time at which to evaluate the polynomial coefficients.
+    deriv : int, optional
+        The derivative order to evaluate (0 for position, 1 for velocity, etc.). Default is 0.
+
+    Returns
+    -------
+    np.ndarray
+        A block matrix of shape (N_COORDS, N_COORDS * N_COEFF) where each row corresponds to the \
+        time basis vector for the specified derivative order at time t.
+
     """
     A = np.zeros((N_COORDS, N_COORDS * N_COEFF))
     # Get time vectors for x, y, z
@@ -143,12 +200,14 @@ def constraints_block_xyz(t: float, deriv: int = 0) -> np.ndarray:
 
 
 def create_constraints(wps: List[Point]) -> Tuple[np.ndarray, np.ndarray]:
-    """Create the constraints matrix and vector for the optimization problem.
+    """
+    Create the constraints matrix and vector for the optimization problem.
 
-    This function constructs the constraints matrix A and vector b based on the provided waypoints. Internally, it uses
-    the `constraints_block_xyz` function to generate the constraints for each coordinate at each waypoint.
-    The constraints include initial and final positions, velocities, and continuity conditions for internal waypoints.
-    The constraints are structured as follows:
+    This function constructs the constraints matrix A and vector b based on the provided \
+    waypoints. Internally, it uses the `constraints_block_xyz` function to generate the \
+    constraints for each coordinate at each waypoint. The constraints include initial and final \
+    positions, velocities, and continuity conditions for internal waypoints. The constraints are \
+    structured as follows:
     1. Initial position (N_COORDS)
     2. Initial velocity is zero (N_COORDS)
     3. Final position (N_COORDS)
@@ -159,11 +218,17 @@ def create_constraints(wps: List[Point]) -> Tuple[np.ndarray, np.ndarray]:
     8. Jerk continuity at each internal waypoint ((n_wps - 2) * N_COORDS)
     Total constraints: (4 + (n_wps - 2) * 5) * N_COORDS
 
-    Args:
-        wps (List[Point]): A list of waypoints, where each waypoint is a list of flat output coordinates.
+    Parameters
+    ----------
+    wps : List[Point]
+        A list of waypoints, where each waypoint is a list containing the time and flat output \
+        coordinates (x, y, z, yaw).
 
-    Returns:
-        Tuple[np.ndarray, np.ndarray]: A tuple containing the constraints matrix A and vector b.
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        A tuple containing the constraints matrix A and vector b.
+
     """
     n_wps = len(wps)
     n_vars = (n_wps - 1) * N_COORDS * N_COEFF
@@ -247,25 +312,39 @@ def create_constraints(wps: List[Point]) -> Tuple[np.ndarray, np.ndarray]:
 def get_flat_output(
     c: cp.Variable, t: float, bound_times: List[float], deriv: int = 0
 ) -> Point:
-    """Get the flat output of the trajectory at time t.
+    """
+    Get the flat output of the trajectory at time t.
 
-    This function evaluates the polynomial coefficients at a given time t and returns the flat output
-    coordinates for the trajectory. It uses the coefficient vector c (optimization result) and the bound times
-    to determine which polynomial segment to evaluate. It handles also derivatives of the flat output.
+    This function evaluates the polynomial coefficients at a given time t and returns the flat \
+    output coordinates for the trajectory. It uses the coefficient vector c (optimization result) \
+    and the bound times to determine which polynomial segment to evaluate. It handles also \
+    derivatives of the flat output.
 
-    Args:
-        c (cp.Variable): The coefficient vector from the optimization problem.
-        t (float): The time at which to evaluate the polynomial coefficients.
-        bound_times (List[float]): A list of times that define the bounds of the polynomial segments. For k segments,
-            there should be k+1 bound times.
-        deriv (int): The derivative order to evaluate (0 for position, 1 for velocity, etc.). Default is 0.
+    Parameters
+    ----------
+    c : cp.Variable
+        The coefficient vector from the optimization problem, which contains the polynomial \
+        coefficients for each segment.
+    t : float
+        The time at which to evaluate the polynomial coefficients.
+    bound_times : List[float]
+        A list of times that define the bounds of the polynomial segments. For k segments,
+        there should be k+1 bound times.
+    deriv : int, optional
+        The derivative order to evaluate (0 for position, 1 for velocity, etc.). Default is 0.
 
-    Returns:
-        Point: A list of flat output coordinates evaluated at time t.
+    Returns
+    -------
+    Point
+        A list of flat output coordinates evaluated at time t. The order is [x, y, z, yaw] for \
+        position, and [vx, vy, vz, vyaw] for velocity, and so on for higher derivatives.
 
-    Raises:
-        ValueError: If the number of bound times is less than 2, if the coefficient vector length does not match
-            the expected size, or if the time t is out of bounds of the provided waypoints.
+    Raises
+    ------
+    ValueError
+        If the number of bound times is less than 2, if the coefficient vector length does not \
+        match the expected size, or if the time t is out of bounds of the provided waypoints.
+
     """
     n_bounds = len(bound_times)
     if n_bounds < 2:
@@ -302,18 +381,28 @@ def get_flat_output(
 
 
 def get_trajectory_minmax(c: cp.Variable, bound_times: List[float]):
-    """Get the position, velocity, and acceleration minimum and maximum values.
+    """
+    Get the position, velocity, and acceleration minimum and maximum values.
 
-    This function evaluates the trajectory defined by the polynomial coefficients c at a set of time points
-    between the first and last bound times. It computes the minimum and maximum values of position, velocity,
-    and acceleration across the trajectory.
+    This function evaluates the trajectory defined by the polynomial coefficients c at a set of \
+    time points between the first and last bound times. It computes the minimum and maximum \
+    values of position, velocity, and acceleration across the trajectory.
 
-    Args:
-        c (cp.Variable): The coefficient vector from the optimization problem.
-        bound_times (List[float]): A list of times that define the bounds of the polynomial segments.
-    Returns:
-        Tuple[float, float, float, float, float, float]: A tuple containing the minimum and maximum values of
-            position (x, y, z), velocity (vx, vy, vz), and acceleration (ax, ay, az) across the trajectory.
+    Parameters
+    ----------
+    c : cp.Variable
+        The coefficient vector from the optimization problem, which contains the polynomial \
+        coefficients for each segment.
+    bound_times : List[float]
+        A list of times that define the bounds of the polynomial segments. For k segments,
+        there should be k+1 bound times.
+
+    Returns
+    -------
+    Tuple[float, float, float, float, float, float]
+        A tuple containing the minimum and maximum values of position (x, y, z), velocity \
+        (vx, vy, vz), and acceleration (ax, ay, az) across the trajectory.
+
     """
     t = np.linspace(bound_times[0], bound_times[-1], 1000)
     positions = np.array([get_flat_output(c, ti, bound_times, 0) for ti in t])

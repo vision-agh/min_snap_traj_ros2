@@ -1,5 +1,27 @@
 """Implementation of the Minimum Snap Trajectory Planner ROS2 node."""
 
+# -------------------------------------------------------------------------------
+# Copyright (c) 2025 Hubert Szolc, EVS AGH University of Krakow, Poland
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+# -------------------------------------------------------------------------------
+
 import rclpy
 import rclpy.logging
 from rclpy.node import Node
@@ -8,7 +30,7 @@ from typing import List
 
 import cvxpy as cp
 
-import min_snap_traj.mst as mst
+# import min_snap_traj.mst as mst
 from min_snap_traj_msgs.msg import Waypoint
 from min_snap_traj_msgs.srv import SetTrajectory
 
@@ -39,8 +61,9 @@ class MSTPlanner(Node):
         self.get_logger().debug(f"Read {len(waypoints)} waypoint(s) from request.")
         return response
 
+
 def main(args=None):
-    """Main function to run the MST Planner node."""
+    """Run the MST Planner node."""
     rclpy.init(args=args)
     rclpy.logging.set_logger_level("mst_planner", rclpy.logging.LoggingSeverity.DEBUG)
 
