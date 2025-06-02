@@ -14,13 +14,16 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
+
 set(msg_files
+  "msg/FlatOutput.msg"
   "msg/Waypoint.msg"
   "msg/WaypointArray.msg"
 )
 
 set(srv_files
   "srv/SetTrajectory.srv"
+  "srv/GetFlatOutput.srv"
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}

@@ -1,0 +1,5 @@
+# Get the flat output at a given time
+
+float64 time
+---
+min_snap_traj_msgs/FlatOutput flat_output

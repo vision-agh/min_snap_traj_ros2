@@ -352,7 +352,7 @@ def get_flat_output(
             "At least two bound times are required to evaluate the polynomial."
         )
     n_polynomials = n_bounds - 1
-    if len(c) != n_polynomials * N_COORDS * N_COEFF:
+    if len(c.value) != n_polynomials * N_COORDS * N_COEFF:
         raise ValueError("Coefficient vector length does not match the expected size.")
     if t < bound_times[0] or t > bound_times[-1]:
         raise ValueError(f"Time t={t} is out of bounds of the provided waypoints.")
@@ -362,7 +362,7 @@ def get_flat_output(
         if bound_times[i] <= t <= bound_times[i + 1]:
             start_idx = i * N_COORDS * N_COEFF
             end_idx = start_idx + N_COORDS * N_COEFF
-            c_segment = c[start_idx:end_idx]
+            c_segment = c.value[start_idx:end_idx]
             break
     else:
         raise ValueError(
@@ -417,16 +417,32 @@ def get_trajectory_minmax(c: cp.Variable, bound_times: List[float]):
     return pos_min, pos_max, vel_min, vel_max, acc_min, acc_max
 
 
-def main():
-    """Run the minimum snap trajectory optimization."""
-    # --- Define the waypoints ---
-    wps = [
-        [0.0, 0.0, 0.0, 0.0, 0.0],  # Initial waypoint (t, x, y, z, yaw)
-        [1.0, 1.0, 1.0, 2.0, -np.pi / 2],  # Second waypoint (t, x, y, z, yaw)
-        [2.0, 2.0, 0.0, 3.0, -np.pi / 6],  # Third waypoint (t, x, y, z, yaw)
-        [3.0, 1.0, -1.0, 1.0, np.pi / 3],  # Fourth waypoint (t, x, y, z, yaw)
-        [4.0, -1.0, -1.0, 1.0, 0.0],  # Fifth waypoint (t, x, y, z, yaw)
-    ]
+def compute_trajectory(wps: List[float]) -> Tuple[cp.Variable, List[float], float]:
+    """
+    Compute the minimum snap trajectory given a list of waypoints.
+
+    This function sets up and solves a convex optimization problem to find the polynomial \
+    coefficients that minimize the snap cost while satisfying the constraints defined by the \
+    waypoints. The waypoints are expected to be in the format [time, x, y, z, yaw]. The function \
+    returns the optimized coefficients, the time bounds for the trajectory, and the optimal cost.
+    The trajectory is represented as a piecewise polynomial, where each segment corresponds to a \
+    polynomial between two consecutive waypoints.
+
+    Parameters
+    ----------
+    wps : List[float]
+        A list of waypoints, where each waypoint is a list containing the time and flat output \
+        coordinates ([time, x, y, z, yaw]).
+
+    Returns
+    -------
+    Tuple[cp.Variable, List[float], float]
+        A tuple containing:
+        - cp.Variable: The optimized polynomial coefficients.
+        - List[float]: The time bounds for the trajectory.
+        - float: The optimal cost of the trajectory.
+
+    """
     n_wps = len(wps)
     n_vars = (n_wps - 1) * N_COORDS * N_COEFF  # Number of variables
 
@@ -457,19 +473,39 @@ def main():
     problem.solve()
 
     # --- Output the results ---
-    print("Optimal coefficients:", c.value)
-    print("Optimal cost:", problem.value)
+    # print("Optimal coefficients:", c.value)
+    # print("Optimal cost:", problem.value)
 
     # --- Get trajectory min/max values ---
     pos_min, pos_max, vel_min, vel_max, acc_min, acc_max = get_trajectory_minmax(
-        c.value, [wp[0] for wp in wps]
+        c, [wp[0] for wp in wps]
     )
-    print("Position min:", pos_min)
-    print("Position max:", pos_max)
-    print("Velocity min:", vel_min)
-    print("Velocity max:", vel_max)
-    print("Acceleration min:", acc_min)
-    print("Acceleration max:", acc_max)
+    # print("Position min:", pos_min)
+    # print("Position max:", pos_max)
+    # print("Velocity min:", vel_min)
+    # print("Velocity max:", vel_max)
+    # print("Acceleration min:", acc_min)
+    # print("Acceleration max:", acc_max)
+
+    # --- Get time bounds for the trajectory ---
+    bound_times = [wp[0] for wp in wps]
+    # print("Bound times:", bound_times)
+
+    return c, bound_times, problem.value
+
+
+if __name__ == "__main__":
+    # --- Define the waypoints ---
+    wps = [
+        [0.0, 0.0, 0.0, 0.0, 0.0],  # Initial waypoint (t, x, y, z, yaw)
+        [1.0, 1.0, 1.0, 2.0, -np.pi / 2],  # Second waypoint (t, x, y, z, yaw)
+        [2.0, 2.0, 0.0, 3.0, -np.pi / 6],  # Third waypoint (t, x, y, z, yaw)
+        [3.0, 1.0, -1.0, 1.0, np.pi / 3],  # Fourth waypoint (t, x, y, z, yaw)
+        [4.0, -1.0, -1.0, 1.0, 0.0],  # Fifth waypoint (t, x, y, z, yaw)
+    ]
+
+    # --- Compute the trajectory ---
+    opt_coeffs, time_bounds = compute_trajectory(wps)
 
     # --- Plot the trajectory in 3D ---
     # t_values = np.linspace(wps[0][0], wps[-1][0], 1000)
@@ -495,7 +531,3 @@ def main():
     # ax2.grid()
     # plt.tight_layout()
     # plt.show()
-
-
-if __name__ == "__main__":
-    main()
