@@ -40,7 +40,6 @@ class MSTPlanner(Node):
 
     def __init__(self):
         super().__init__("mst_planner")
-        self.get_logger().info("Minimum Snap Trajectory Planner Node has been started.")
 
         self.opt_poly_coeffs: cp.Variable | None = None
         self.time_knots: List[float] | None = None
@@ -52,6 +51,8 @@ class MSTPlanner(Node):
             self._set_trajectory_callback,
         )
 
+        self.get_logger().info("Minimum Snap Trajectory Planner Node has been started.")
+
     def _set_trajectory_callback(self, request, response):
         self.get_logger().debug("Received SetTrajectory request.")
         waypoints: List[List[float]] = []
@@ -59,6 +60,7 @@ class MSTPlanner(Node):
         for wp in request.waypoints:
             waypoints.append([wp.timestamp, wp.x, wp.y, wp.z, wp.yaw])
         self.get_logger().debug(f"Read {len(waypoints)} waypoint(s) from request.")
+        response.duration = 0.0
         return response
 
 
@@ -68,10 +70,14 @@ def main(args=None):
     rclpy.logging.set_logger_level("mst_planner", rclpy.logging.LoggingSeverity.DEBUG)
 
     planner = MSTPlanner()
-    rclpy.spin(planner)
-
-    planner.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(planner)
+    except KeyboardInterrupt:
+        planner.get_logger().info(
+            "Keyboard interrupt received, shutting down MST Planner node."
+        )
+    finally:
+        planner.destroy_node()
 
 
 if __name__ == "__main__":
