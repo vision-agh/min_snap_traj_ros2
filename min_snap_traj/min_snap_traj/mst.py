@@ -21,14 +21,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # -------------------------------------------------------------------------------
-
-import numpy as np
-import cvxpy as cp
 from math import factorial
+from typing import List, Tuple
+
+import cvxpy as cp
+import numpy as np
+
 
 # import matplotlib.pyplot as plt
-
-from typing import List, Tuple
 
 DEG = 7
 N_COEFF = DEG + 1
@@ -40,7 +40,7 @@ Point = List[
 ]  # Type alias for a trajectory point in flat output space (x, y, z, yaw)
 
 
-def t_vec(t: float, deg: int, deriv: float = 0) -> List[float]:
+def t_vec(t: float, deg: int, deriv: int = 0) -> List[float]:
     """
     Generate the n-th derivative of time vector for the polynomial coefficients.
 
