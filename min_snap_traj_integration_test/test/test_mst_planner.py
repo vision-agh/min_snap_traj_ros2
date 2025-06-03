@@ -31,7 +31,7 @@ import rclpy
 
 import numpy as np
 
-from min_snap_traj_msgs.msg import Waypoint
+from min_snap_traj_msgs.msg import FlatOutput, Waypoint
 from min_snap_traj_msgs.srv import GetFlatOutput, SetTrajectory
 
 
@@ -88,7 +88,7 @@ class TestMSTPlanner(unittest.TestCase):
             "Service not available",
         )
 
-        # Create a request
+        # Create a request for setting the trajectory
         request = SetTrajectory.Request()
         request.waypoints = [
             Waypoint(timestamp=0.0, x=0.0, y=0.0, z=0.0, yaw=0.0),
@@ -98,24 +98,35 @@ class TestMSTPlanner(unittest.TestCase):
             Waypoint(timestamp=4.0, x=-1.0, y=-1.0, z=1.0, yaw=0.0),
         ]
 
-        # Call the service
+        # Send the request to set the trajectory
         future = set_trajectory_service.call_async(request)
         rclpy.spin_until_future_complete(self.test_node, future)
 
-        # Check the response
+        # Check if the trajectory was set successfully
         self.assertGreaterEqual(future.result().duration, 0.0)
 
-        # Another call to the service should not clear existing waypoints
+        # Another request for setting the trajectory should fail
         request.waypoints = [
             Waypoint(timestamp=0.3, x=3.0, y=3.0, z=0.0, yaw=0.0),
         ]
         future = set_trajectory_service.call_async(request)
         rclpy.spin_until_future_complete(self.test_node, future)
 
-        # Check the response
+        # Check if the second request failed
         self.assertEqual(future.result().duration, -1.0)
 
-        # Call the get_flat_output_callback service
+        # Check if the trajectory is published on the topic
+        trajectory_topic = "/mst_planner/trajectory"
+        self.test_node.create_subscription(
+            FlatOutput,
+            trajectory_topic,
+            lambda msg: self.assertIsNotNone(
+                msg, "Received trajectory should not be None"
+            ),
+            10,
+        )
+
+        # Check if it is possible to get the flat output via the service
         get_flat_output_service = self.test_node.create_client(
             GetFlatOutput, "mst_planner/get_flat_output"
         )
@@ -124,7 +135,7 @@ class TestMSTPlanner(unittest.TestCase):
             "Service not available",
         )
 
-        # Check bad request handling
+        # Check bad request handling for get_flat_output_service
         get_flat_output_request = GetFlatOutput.Request()
         get_flat_output_request.time = -1.0
         future = get_flat_output_service.call_async(get_flat_output_request)
@@ -136,7 +147,7 @@ class TestMSTPlanner(unittest.TestCase):
             "Service should not succeed with negative time",
         )
 
-        # Check valid request handling
+        # Check valid request handling for get_flat_output_service
         get_flat_output_request.time = 1.0
         future = get_flat_output_service.call_async(get_flat_output_request)
         rclpy.spin_until_future_complete(self.test_node, future)

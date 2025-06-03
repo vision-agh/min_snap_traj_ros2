@@ -30,21 +30,45 @@ from typing import List
 
 import cvxpy as cp
 
+import numpy as np
+
 from min_snap_traj.mst import compute_trajectory, get_flat_output
 
-from min_snap_traj_msgs.msg import Waypoint
+from min_snap_traj_msgs.msg import FlatOutput, Waypoint
 from min_snap_traj_msgs.srv import GetFlatOutput, SetTrajectory
 
 
 class MSTPlanner(Node):
-    """Node for Minimum Snap Trajectory Planner."""
+    """
+    Node for Minimum Snap Trajectory Planner.
+
+    This node serves as a ROS2 interface for computing minimum snap trajectories
+    based on a set of waypoints. The basic pipeline is as follows:
+    1. Set a trajectory using the `SetTrajectory` service.
+    2. Read the flat output published periodically on the `mst_planner/trajectory` topic.
+    Additionally, the node provides a service to get the flat output at a specific time
+    using the `GetFlatOutput` service.
+    The flat output includes position, velocity, acceleration, and yaw information
+    at the requested time, computed from the polynomial coefficients of the trajectory, with
+    its derivatives up to the second order. It is possible to adjust the parameters via the
+    configuration file.
+
+    """
 
     def __init__(self):
         super().__init__("mst_planner")
+        self._load_params()
 
-        self.waypoints: List[List[float]] = []
         self.opt_poly_coeffs: cp.Variable | None = None
         self.time_knots: List[float] | None = None
+        self.current_time: float = 0.0
+
+        # Topics
+        self._trajectory_publisher = self.create_publisher(
+            FlatOutput,
+            "mst_planner/trajectory",
+            10,
+        )
 
         # Services
         self._get_flat_output_srv = self.create_service(
@@ -59,81 +83,201 @@ class MSTPlanner(Node):
             self._set_trajectory_callback,
         )
 
+        # Timer to publish trajectory periodically
+        self._publish_timer = self.create_timer(
+            self.dt,
+            self.publish_trajectory,
+        )
+
         self.get_logger().info("Minimum Snap Trajectory Planner Node has been started.")
 
     def _get_flat_output_callback(self, request, response):
+        """Return the flat output at the requested time."""
         self.get_logger().debug("Received GetFlatOutput request.")
-        if self.opt_poly_coeffs is None or self.time_knots is None:
-            self.get_logger().error(
-                "Received GetFlatOutput request while trajectory is not set. "
-                "Returning empty response."
+
+        # Read the flat output at the requested time
+        response.flat_output = self._read_flat_output(request.time)
+
+        if response.flat_output.timestamp >= 0:
+            self.get_logger().debug(
+                f"Flat output at time {response.flat_output.timestamp}: "
+                f"x={response.flat_output.x:.2f}, y={response.flat_output.y:.2f}, "
+                f"z={response.flat_output.z:.2f}, yaw={response.flat_output.yaw:.2f}, "
+                f"vx={response.flat_output.vx:.2f}, vy={response.flat_output.vy:.2f}, "
+                f"vz={response.flat_output.vz:.2f}, yaw_rate={response.flat_output.yaw_rate:.2f}, "
+                f"ax={response.flat_output.ax:.2f}, ay={response.flat_output.ay:.2f}, "
+                f"az={response.flat_output.az:.2f}, yaw_accel={response.flat_output.yaw_accel:.2f}"
             )
-            response.flat_output.timestamp = -1.0
-            return response
-        if request.time < self.time_knots[0] or request.time > self.time_knots[-1]:
-            self.get_logger().error(
-                f"Requested timestamp {request.time} is out of bounds "
-                f"[{self.time_knots[0]}, {self.time_knots[-1]}]. Returning empty response."
-            )
-            response.flat_output.timestamp = -1.0
-            return response
-
-        flat_output = get_flat_output(
-            self.opt_poly_coeffs, request.time, self.time_knots, deriv=0
-        )
-        flat_output_d1 = get_flat_output(
-            self.opt_poly_coeffs, request.time, self.time_knots, deriv=1
-        )
-        flat_output_d2 = get_flat_output(
-            self.opt_poly_coeffs, request.time, self.time_knots, deriv=2
-        )
-
-        response.flat_output.timestamp = request.time
-        response.flat_output.x = flat_output[0]
-        response.flat_output.y = flat_output[1]
-        response.flat_output.z = flat_output[2]
-        response.flat_output.yaw = flat_output[3]
-        response.flat_output.vx = flat_output_d1[0]
-        response.flat_output.vy = flat_output_d1[1]
-        response.flat_output.vz = flat_output_d1[2]
-        response.flat_output.yaw_rate = flat_output_d1[3]
-        response.flat_output.ax = flat_output_d2[0]
-        response.flat_output.ay = flat_output_d2[1]
-        response.flat_output.az = flat_output_d2[2]
-        response.flat_output.yaw_accel = flat_output_d2[3]
-
-        self.get_logger().debug(
-            f"Flat output at time {request.time}: "
-            f"x={flat_output[0]:.2f}, y={flat_output[1]:.2f}, z={flat_output[2]:.2f}, "
-            f"yaw={flat_output[3]:.2f}, vx={flat_output_d1[0]:.2f}, "
-            f"vy={flat_output_d1[1]:.2f}, vz={flat_output_d1[2]:.2f}, "
-            f"yaw_rate={flat_output_d1[3]:.2f}, ax={flat_output_d2[0]:.2f}, "
-            f"ay={flat_output_d2[1]:.2f}, az={flat_output_d2[2]:.2f}, "
-            f"yaw_accel={flat_output_d2[3]:.2f}"
-        )
 
         return response
 
+    def _load_params(self):
+        """Load parameters from the ROS2 parameter server."""
+        self.declare_parameter("dt", 0.1)
+        self.declare_parameter("v_max.x", 1.0)
+        self.declare_parameter("v_max.y", 1.0)
+        self.declare_parameter("v_max.z", 1.0)
+        self.declare_parameter("v_max.yaw", 1.0)
+        self.declare_parameter("v_min.x", -1.0)
+        self.declare_parameter("v_min.y", -1.0)
+        self.declare_parameter("v_min.z", -1.0)
+        self.declare_parameter("v_min.yaw", -1.0)
+        self.declare_parameter("a_max.x", 1.0)
+        self.declare_parameter("a_max.y", 1.0)
+        self.declare_parameter("a_max.z", 1.0)
+        self.declare_parameter("a_max.yaw", 1.0)
+        self.declare_parameter("a_min.x", -1.0)
+        self.declare_parameter("a_min.y", -1.0)
+        self.declare_parameter("a_min.z", -1.0)
+        self.declare_parameter("a_min.yaw", -1.0)
+
+        self.get_logger().info("Loading parameters...")
+
+        self.dt = self.get_parameter("dt").get_parameter_value().double_value
+        self.get_logger().debug(f"Time step: {self.dt:.2f} seconds")
+
+        self.vlims = np.array(
+            [
+                [
+                    self.get_parameter("v_min.x").get_parameter_value().double_value,
+                    self.get_parameter("v_max.x").get_parameter_value().double_value,
+                ],
+                [
+                    self.get_parameter("v_min.y").get_parameter_value().double_value,
+                    self.get_parameter("v_max.y").get_parameter_value().double_value,
+                ],
+                [
+                    self.get_parameter("v_min.z").get_parameter_value().double_value,
+                    self.get_parameter("v_max.z").get_parameter_value().double_value,
+                ],
+                [
+                    self.get_parameter("v_min.yaw").get_parameter_value().double_value,
+                    self.get_parameter("v_max.yaw").get_parameter_value().double_value,
+                ],
+            ]
+        )
+        self.get_logger().debug(f"Velocity limits:\n {self.vlims}")
+
+        self.alims = np.array(
+            [
+                [
+                    self.get_parameter("a_min.x").get_parameter_value().double_value,
+                    self.get_parameter("a_max.x").get_parameter_value().double_value,
+                ],
+                [
+                    self.get_parameter("a_min.y").get_parameter_value().double_value,
+                    self.get_parameter("a_max.y").get_parameter_value().double_value,
+                ],
+                [
+                    self.get_parameter("a_min.z").get_parameter_value().double_value,
+                    self.get_parameter("a_max.z").get_parameter_value().double_value,
+                ],
+                [
+                    self.get_parameter("a_min.yaw").get_parameter_value().double_value,
+                    self.get_parameter("a_max.yaw").get_parameter_value().double_value,
+                ],
+            ]
+        )
+        self.get_logger().debug(f"Acceleration limits:\n {self.alims}")
+        self.get_logger().info("Parameters loaded successfully.")
+
+    def _read_flat_output(self, time: float) -> FlatOutput:
+        """Read the flat output at the given time."""
+        if self.opt_poly_coeffs is None or self.time_knots is None:
+            self.get_logger().warning("No trajectory set. Cannot read flat output.")
+            return FlatOutput(timestamp=-1.0)
+        if time < self.time_knots[0] or time > self.time_knots[-1]:
+            self.get_logger().warning(
+                f"Requested time {time} is out of bounds "
+                f"[{self.time_knots[0]}, {self.time_knots[-1]}]. Returning empty FlatOutput."
+            )
+            return FlatOutput(timestamp=-1.0)
+
+        # Compute the flat output at the given time
+        flat_output = get_flat_output(
+            self.opt_poly_coeffs, time, self.time_knots, deriv=0
+        )
+        flat_output_d1 = get_flat_output(
+            self.opt_poly_coeffs, time, self.time_knots, deriv=1
+        )
+        flat_output_d2 = get_flat_output(
+            self.opt_poly_coeffs, time, self.time_knots, deriv=2
+        )
+
+        # Create FlatOutput message
+        flat_output_msg = FlatOutput()
+        flat_output_msg.timestamp = time
+        flat_output_msg.x = flat_output[0]
+        flat_output_msg.y = flat_output[1]
+        flat_output_msg.z = flat_output[2]
+        flat_output_msg.yaw = flat_output[3]
+        flat_output_msg.vx = flat_output_d1[0]
+        flat_output_msg.vy = flat_output_d1[1]
+        flat_output_msg.vz = flat_output_d1[2]
+        flat_output_msg.yaw_rate = flat_output_d1[3]
+        flat_output_msg.ax = flat_output_d2[0]
+        flat_output_msg.ay = flat_output_d2[1]
+        flat_output_msg.az = flat_output_d2[2]
+        flat_output_msg.yaw_accel = flat_output_d2[3]
+
+        return flat_output_msg
+
     def _set_trajectory_callback(self, request, response):
+        """Set the trajectory based on the provided waypoints."""
         self.get_logger().debug("Received SetTrajectory request.")
-        if len(self.waypoints) > 0:
+        if self.time_knots is not None and self.current_time < self.time_knots[-1]:
             self.get_logger().error(
-                "Received SetTrajectory request while waypoints are already set. "
-                "Not clearing existing waypoints."
+                "Received SetTrajectory request while trajectory is executed. "
+                "Not clearing existing trajectory."
             )
             response.duration = -1.0
             return response
+
+        waypoints: List[List[float]] = []
         wp: Waypoint
         for wp in request.waypoints:
-            self.waypoints.append([wp.timestamp, wp.x, wp.y, wp.z, wp.yaw])
+            waypoints.append([wp.timestamp, wp.x, wp.y, wp.z, wp.yaw])
 
-        self.opt_poly_coeffs, self.time_knots, opt_val = compute_trajectory(
-            self.waypoints
-        )
+        self.opt_poly_coeffs, self.time_knots, opt_val = compute_trajectory(waypoints)
         self.get_logger().info(f"Trajectory set with optimal value: {opt_val:.4f}")
 
+        # TODO: Check vehicle constraints and adjust trajectory if necessary
         response.duration = 0.0
+
+        self.current_time = 0.0
+
         return response
+
+    def publish_trajectory(self):
+        """
+        Publish the trajectory point as a FlatOutput message.
+
+        This method should be called periodically to publish the current trajectory state.
+        It checks if the trajectory has been set and publishes the FlatOutput message with the
+        current time and flat output coordinates. If the trajectory is not set, it logs a warning.
+
+        """
+        # If called before trajectory is set, do nothing
+        if self.opt_poly_coeffs is None or self.time_knots is None:
+            self.get_logger().warning("No trajectory set. Cannot publish FlatOutput.")
+            return
+
+        # Read the flat output at the current time
+        flat_output_msg = self._read_flat_output(self.current_time)
+        if flat_output_msg.timestamp < 0:
+            self.get_logger().warning(
+                f"Flat output at time {self.current_time} is invalid. "
+                "Skipping publishing."
+            )
+            return
+
+        # Publish the FlatOutput message
+        self._trajectory_publisher.publish(flat_output_msg)
+
+        # Increment the current time only if it will not exceed the last time knot
+
+        if self.current_time + self.dt <= self.time_knots[-1]:
+            self.current_time += self.dt
 
 
 def main(args=None):
