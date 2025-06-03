@@ -21,6 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # -------------------------------------------------------------------------------
+import copy
 from math import factorial
 from typing import List, Tuple
 
@@ -29,6 +30,7 @@ import numpy as np
 
 
 # import matplotlib.pyplot as plt
+# from mpl_toolkits.mplot3d import Axes3D
 
 DEG = 7
 N_COEFF = DEG + 1
@@ -199,15 +201,16 @@ def constraints_block_xyz(t: float, deriv: int = 0) -> np.ndarray:
     return A
 
 
-def create_constraints(wps: List[Point]) -> Tuple[np.ndarray, np.ndarray]:
+def create_equality_constraints(wps: List[Point]) -> Tuple[np.ndarray, np.ndarray]:
     """
     Create the constraints matrix and vector for the optimization problem.
 
     This function constructs the constraints matrix A and vector b based on the provided \
     waypoints. Internally, it uses the `constraints_block_xyz` function to generate the \
     constraints for each coordinate at each waypoint. The constraints include initial and final \
-    positions, velocities, and continuity conditions for internal waypoints. The constraints are \
-    structured as follows:
+    positions, velocities, and continuity conditions for internal waypoints.
+
+    The equality constraints are structured as follows:
     1. Initial position (N_COORDS)
     2. Initial velocity is zero (N_COORDS)
     3. Final position (N_COORDS)
@@ -216,7 +219,7 @@ def create_constraints(wps: List[Point]) -> Tuple[np.ndarray, np.ndarray]:
     6. Velocity continuity at each internal waypoint ((n_wps - 2) * N_COORDS)
     7. Acceleration continuity at each internal waypoint ((n_wps - 2) * N_COORDS)
     8. Jerk continuity at each internal waypoint ((n_wps - 2) * N_COORDS)
-    Total constraints: (4 + (n_wps - 2) * 5) * N_COORDS
+    Total equality constraints: (4 + (n_wps - 2) * 5) * N_COORDS
 
     Parameters
     ----------
@@ -306,6 +309,80 @@ def create_constraints(wps: List[Point]) -> Tuple[np.ndarray, np.ndarray]:
         )
         b[m : m + N_COORDS] = [0.0] * N_COORDS
         m += N_COORDS
+    return A, b
+
+
+def create_inequality_constraints(
+    wps: List[Point], vlim: np.ndarray, alim: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Create the inequality constraints matrix and vector for the optimization problem.
+
+    The inequality constraints are structured as follows:
+    1. Above minimum velocity in each internal waypoint ((n_wps - 2) * N_COORDS)
+    2. Below maximum velocity in each internal waypoint ((n_wps - 2) * N_COORDS)
+    3. Above minimum acceleration in each internal waypoint ((n_wps - 2) * N_COORDS)
+    4. Below maximum acceleration in each internal waypoint ((n_wps - 2) * N_COORDS)
+    Total inequality constraints: (n_wps - 2) * 4 * N_COORDS
+
+    Parameters
+    ----------
+    wps : List[Point]
+        A list of waypoints, where each waypoint is a list containing the time and flat output \
+        coordinates (x, y, z, yaw).
+    vlim : np.ndarray
+        A 2D array of shape (N_COORDS, 2) containing the velocity limits for each coordinate. \
+        Each row corresponds to a coordinate and contains [min_velocity, max_velocity].
+    alim : np.ndarray
+        A 2D array of shape (N_COORDS, 2) containing the acceleration limits for each coordinate. \
+        Each row corresponds to a coordinate and contains [min_acceleration, max_acceleration].
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        A tuple containing the inequality constraints matrix A and vector b.
+
+    Raises
+    ------
+    ValueError
+        If the shapes of vlim or alim are not as expected.
+
+    """
+    # Check limits dimensions
+    if vlim.shape != (N_COORDS, 2):
+        raise ValueError(f"vlim must have shape ({N_COORDS}, 2), got {vlim.shape}")
+    if alim.shape != (N_COORDS, 2):
+        raise ValueError(f"alim must have shape ({N_COORDS}, 2), got {alim.shape}")
+    n_wps = len(wps)
+    n_vars = (n_wps - 1) * N_COORDS * N_COEFF
+    n_constraints = (n_wps - 2) * 4 * N_COORDS
+    A = np.zeros((n_constraints, n_vars))
+    b = np.zeros(n_constraints)
+    m = 0  # Constraint row index
+
+    for i in range(1, n_wps - 1):
+        t = wps[i][0]
+        start_col_idx = (i - 1) * N_COORDS * N_COEFF
+        end_col_idx = start_col_idx + N_COORDS * N_COEFF
+
+        # Velocity constraints
+        A[m : m + N_COORDS, start_col_idx:end_col_idx] = -constraints_block_xyz(t, 1)
+        b[m : m + N_COORDS] = -vlim[:, 0]
+        m += N_COORDS
+
+        A[m : m + N_COORDS, start_col_idx:end_col_idx] = constraints_block_xyz(t, 1)
+        b[m : m + N_COORDS] = vlim[:, 1]
+        m += N_COORDS
+
+        # Acceleration constraints
+        A[m : m + N_COORDS, start_col_idx:end_col_idx] = -constraints_block_xyz(t, 2)
+        b[m : m + N_COORDS] = -alim[:, 0]
+        m += N_COORDS
+
+        A[m : m + N_COORDS, start_col_idx:end_col_idx] = constraints_block_xyz(t, 2)
+        b[m : m + N_COORDS] = alim[:, 1]
+        m += N_COORDS
+
     return A, b
 
 
@@ -417,7 +494,12 @@ def get_trajectory_minmax(c: cp.Variable, bound_times: List[float]):
     return pos_min, pos_max, vel_min, vel_max, acc_min, acc_max
 
 
-def compute_trajectory(wps: List[float]) -> Tuple[cp.Variable, List[float], float]:
+def compute_trajectory(
+    wps: List[float],
+    vlim: np.ndarray = None,
+    alim: np.ndarray = None,
+    verbose: bool = False,
+) -> Tuple[cp.Variable, List[float], float]:
     """
     Compute the minimum snap trajectory given a list of waypoints.
 
@@ -433,6 +515,14 @@ def compute_trajectory(wps: List[float]) -> Tuple[cp.Variable, List[float], floa
     wps : List[float]
         A list of waypoints, where each waypoint is a list containing the time and flat output \
         coordinates ([time, x, y, z, yaw]).
+    vlim : np.ndarray, optional
+        A 2D array of shape (N_COORDS, 2) representing the velocity limits for each coordinate. \
+        If None, no velocity limits are applied. Default is None.
+    alim : np.ndarray, optional
+        A 2D array of shape (N_COORDS, 2) representing the acceleration limits for each \
+        coordinate. If None, no acceleration limits are applied. Default is None.
+    verbose : bool, optional
+        If True, prints additional information during the optimization process. Default is False.
 
     Returns
     -------
@@ -446,50 +536,87 @@ def compute_trajectory(wps: List[float]) -> Tuple[cp.Variable, List[float], floa
     n_wps = len(wps)
     n_vars = (n_wps - 1) * N_COORDS * N_COEFF  # Number of variables
 
-    # --- Decision variables ---
-    c = cp.Variable(n_vars)
+    wps_copy = copy.deepcopy(wps)
+    while True:
+        # --- Decision variables ---
+        c = cp.Variable(n_vars)
 
-    # --- Objective function ---
-    H = np.zeros((n_vars, n_vars))
-    for i in range(n_wps - 1):
-        t1 = wps[i][0]
-        t2 = wps[i + 1][0]
-        H_block = snap_cost_block_xyz(t1, t2)
-        start_idx = i * N_COORDS * N_COEFF
-        end_idx = start_idx + N_COORDS * N_COEFF
-        H[start_idx:end_idx, start_idx:end_idx] = H_block
-    H = cp.psd_wrap(H)  # Ensure H is positive semidefinite
-    cost = cp.quad_form(c, H)
-    objective = cp.Minimize(cost)
+        # --- Objective function ---
+        H = np.zeros((n_vars, n_vars))
+        for i in range(n_wps - 1):
+            t1 = wps_copy[i][0]
+            t2 = wps_copy[i + 1][0]
+            H_block = snap_cost_block_xyz(t1, t2)
+            start_idx = i * N_COORDS * N_COEFF
+            end_idx = start_idx + N_COORDS * N_COEFF
+            H[start_idx:end_idx, start_idx:end_idx] = H_block
+        H = cp.psd_wrap(H)  # Ensure H is positive semidefinite
+        cost = cp.quad_form(c, H)
+        objective = cp.Minimize(cost)
 
-    # --- Define the constraints ---
-    A, b = create_constraints(wps)
-    constraints = [A @ c == b]
+        # --- Define the constraints ---
+        A1, b1 = create_equality_constraints(wps_copy)
+        constraints = [A1 @ c == b1]
+        if vlim is not None and alim is not None:
+            A2, b2 = create_inequality_constraints(wps_copy, vlim, alim)
+            constraints.append(A2 @ c <= b2)
 
-    # --- Problem definition ---
-    problem = cp.Problem(objective, constraints)
+        # --- Problem definition ---
+        problem = cp.Problem(objective, constraints)
 
-    # --- Solve the problem ---
-    problem.solve()
+        # --- Solve the problem ---
+        problem.solve(max_iter=20000, verbose=verbose)
 
-    # --- Output the results ---
-    # print("Optimal coefficients:", c.value)
-    # print("Optimal cost:", problem.value)
+        # --- Output the results ---
+        if verbose:
+            print("Optimal coefficients:", c.value)
+            print("Optimal cost:", problem.value)
 
-    # --- Get trajectory min/max values ---
-    pos_min, pos_max, vel_min, vel_max, acc_min, acc_max = get_trajectory_minmax(
-        c, [wp[0] for wp in wps]
-    )
-    # print("Position min:", pos_min)
-    # print("Position max:", pos_max)
-    # print("Velocity min:", vel_min)
-    # print("Velocity max:", vel_max)
-    # print("Acceleration min:", acc_min)
-    # print("Acceleration max:", acc_max)
+        # --- Get time bounds for the trajectory ---
+        bound_times = [wp[0] for wp in wps_copy]
+        if verbose:
+            print("Bound times:", bound_times)
 
-    # --- Get time bounds for the trajectory ---
-    bound_times = [wp[0] for wp in wps]
-    # print("Bound times:", bound_times)
+        # --- Ensure trajectory limits ---
+        if vlim is None:
+            vlim = np.concat(
+                (np.ones((N_COORDS, 1)) * (-np.inf), np.ones((N_COORDS, 1)) * np.inf),
+                axis=1,
+            )
+        if alim is None:
+            alim = np.concat(
+                (np.ones((N_COORDS, 1)) * (-np.inf), np.ones((N_COORDS, 1)) * np.inf),
+                axis=1,
+            )
+        pos_min, pos_max, vel_min, vel_max, acc_min, acc_max = get_trajectory_minmax(
+            c, bound_times
+        )
+        if verbose:
+            print("Trajectory limits:")
+            print("Position min:", pos_min)
+            print("Position max:", pos_max)
+            print("Velocity min:", vel_min)
+            print("Velocity max:", vel_max)
+            print("Acceleration min:", acc_min)
+            print("Acceleration max:", acc_max)
+
+        # Check if the trajectory limits are satisfied
+        if (
+            np.all(vel_min >= vlim[:, 0])
+            and np.all(vel_max <= vlim[:, 1])
+            and np.all(acc_min >= alim[:, 0])
+            and np.all(acc_max <= alim[:, 1])
+        ):
+            break
+
+        if verbose:
+            print(
+                "Trajectory limits not satisfied. Adjusting waypoints and retrying..."
+            )
+
+        # If limits are not satisfied, adjust the waypoints
+        for i in range(len(wps_copy)):
+            wps_copy[i][0] *= 1.3  # Increase time to allow for more flexibility
 
     return c, bound_times, problem.value
 
@@ -504,13 +631,32 @@ if __name__ == "__main__":
         [4.0, -1.0, -1.0, 1.0, 0.0],  # Fifth waypoint (t, x, y, z, yaw)
     ]
 
-    # --- Compute the trajectory ---
-    opt_coeffs, time_bounds = compute_trajectory(wps)
+    vlims = np.array(
+        [
+            [-1.0, 1.0],  # Velocity limits for x
+            [-1.0, 1.0],  # Velocity limits for y
+            [-2.0, 2.0],  # Velocity limits for z
+            [-np.pi / 4, np.pi / 4],  # Velocity limits for yaw
+        ]
+    )
+    alims = np.array(
+        [
+            [-0.5, 0.5],  # Acceleration limits for x
+            [-0.5, 0.5],  # Acceleration limits for y
+            [-1.0, 1.0],  # Acceleration limits for z
+            [-np.pi / 8, np.pi / 8],  # Acceleration limits for yaw
+        ]
+    )
 
-    # --- Plot the trajectory in 3D ---
+    # --- Compute the trajectory ---
+    opt_coeffs, time_bounds, opt_val = compute_trajectory(wps, vlims, alims)
+
+    print("Optimal value:", opt_val)
+
+    # # --- Plot the trajectory in 3D ---
     # t_values = np.linspace(wps[0][0], wps[-1][0], 1000)
     # trajectory = np.array(
-    #     [get_flat_output(c.value, t, [wp[0] for wp in wps]) for t in t_values]
+    #     [get_flat_output(opt_coeffs, t, [wp[0] for wp in wps]) for t in t_values]
     # )
     # fig = plt.figure()
     # ax = fig.add_subplot(111, projection="3d")

@@ -238,11 +238,12 @@ class MSTPlanner(Node):
         for wp in request.waypoints:
             waypoints.append([wp.timestamp, wp.x, wp.y, wp.z, wp.yaw])
 
-        self.opt_poly_coeffs, self.time_knots, opt_val = compute_trajectory(waypoints)
+        self.opt_poly_coeffs, self.time_knots, opt_val = compute_trajectory(
+            waypoints, self.vlims, self.alims
+        )
         self.get_logger().info(f"Trajectory set with optimal value: {opt_val:.4f}")
-
-        # TODO: Check vehicle constraints and adjust trajectory if necessary
-        response.duration = 0.0
+        self.get_logger().debug(f"Time knots: {self.time_knots}")
+        response.duration = self.time_knots[-1] - self.time_knots[0]
 
         self.current_time = 0.0
 
