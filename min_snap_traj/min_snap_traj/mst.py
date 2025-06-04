@@ -30,6 +30,7 @@ import numpy as np
 
 
 # import matplotlib.pyplot as plt
+
 # from mpl_toolkits.mplot3d import Axes3D
 
 DEG = 7
@@ -37,9 +38,7 @@ N_COEFF = DEG + 1
 K_R = 4
 N_COORDS = 4  # Number of coordinates (x, y, z, yaw)
 
-Point = List[
-    float
-]  # Type alias for a trajectory point in flat output space (x, y, z, yaw)
+Point = List[float]  # Type alias for a trajectory point in flat output space (x, y, z, yaw)
 
 
 def t_vec(t: float, deg: int, deriv: int = 0) -> List[float]:
@@ -270,9 +269,7 @@ def create_equality_constraints(wps: List[Point]) -> Tuple[np.ndarray, np.ndarra
         end_col_next_idx = start_col_next_idx + N_COORDS * N_COEFF
 
         # Position for both segments
-        A[m : m + N_COORDS, start_col_prev_idx:end_col_prev_idx] = (
-            constraints_block_xyz(t, 0)
-        )
+        A[m : m + N_COORDS, start_col_prev_idx:end_col_prev_idx] = constraints_block_xyz(t, 0)
         b[m : m + N_COORDS] = wps[i][1 : 1 + N_COORDS]
         A[m + N_COORDS : m + 2 * N_COORDS, start_col_next_idx:end_col_next_idx] = (
             constraints_block_xyz(t, 0)
@@ -281,32 +278,20 @@ def create_equality_constraints(wps: List[Point]) -> Tuple[np.ndarray, np.ndarra
         m += 2 * N_COORDS
 
         # Velocity continuity
-        A[m : m + N_COORDS, start_col_prev_idx:end_col_prev_idx] = (
-            constraints_block_xyz(t, 1)
-        )
-        A[m : m + N_COORDS, start_col_next_idx:end_col_next_idx] = (
-            -constraints_block_xyz(t, 1)
-        )
+        A[m : m + N_COORDS, start_col_prev_idx:end_col_prev_idx] = constraints_block_xyz(t, 1)
+        A[m : m + N_COORDS, start_col_next_idx:end_col_next_idx] = -constraints_block_xyz(t, 1)
         b[m : m + N_COORDS] = [0.0] * N_COORDS
         m += N_COORDS
 
         # Acceleration continuity
-        A[m : m + N_COORDS, start_col_prev_idx:end_col_prev_idx] = (
-            constraints_block_xyz(t, 2)
-        )
-        A[m : m + N_COORDS, start_col_next_idx:end_col_next_idx] = (
-            -constraints_block_xyz(t, 2)
-        )
+        A[m : m + N_COORDS, start_col_prev_idx:end_col_prev_idx] = constraints_block_xyz(t, 2)
+        A[m : m + N_COORDS, start_col_next_idx:end_col_next_idx] = -constraints_block_xyz(t, 2)
         b[m : m + N_COORDS] = [0.0] * N_COORDS
         m += N_COORDS
 
         # Jerk continuity
-        A[m : m + N_COORDS, start_col_prev_idx:end_col_prev_idx] = (
-            constraints_block_xyz(t, 3)
-        )
-        A[m : m + N_COORDS, start_col_next_idx:end_col_next_idx] = (
-            -constraints_block_xyz(t, 3)
-        )
+        A[m : m + N_COORDS, start_col_prev_idx:end_col_prev_idx] = constraints_block_xyz(t, 3)
+        A[m : m + N_COORDS, start_col_next_idx:end_col_next_idx] = -constraints_block_xyz(t, 3)
         b[m : m + N_COORDS] = [0.0] * N_COORDS
         m += N_COORDS
     return A, b
@@ -387,7 +372,11 @@ def create_inequality_constraints(
 
 
 def get_flat_output(
-    c: cp.Variable, t: float, bound_times: List[float], deriv: int = 0
+    c: cp.Variable,
+    t: float,
+    bound_times: List[float],
+    deriv: int = 0,
+    alpha: float = 1.0,
 ) -> Point:
     """
     Get the flat output of the trajectory at time t.
@@ -409,6 +398,8 @@ def get_flat_output(
         there should be k+1 bound times.
     deriv : int, optional
         The derivative order to evaluate (0 for position, 1 for velocity, etc.). Default is 0.
+    alpha : float, optional
+        A scaling factor for the time vector. Default is 1.0.
 
     Returns
     -------
@@ -425,9 +416,7 @@ def get_flat_output(
     """
     n_bounds = len(bound_times)
     if n_bounds < 2:
-        raise ValueError(
-            "At least two bound times are required to evaluate the polynomial."
-        )
+        raise ValueError("At least two bound times are required to evaluate the polynomial.")
     n_polynomials = n_bounds - 1
     if len(c.value) != n_polynomials * N_COORDS * N_COEFF:
         raise ValueError("Coefficient vector length does not match the expected size.")
@@ -442,12 +431,10 @@ def get_flat_output(
             c_segment = c.value[start_idx:end_idx]
             break
     else:
-        raise ValueError(
-            f"Time t={t} does not fall within the bounds of the provided waypoints."
-        )
+        raise ValueError(f"Time t={t} does not fall within the bounds of the provided waypoints.")
 
     # Calculate the polynomial value at time t
-    t_vec_eval = t_vec(t, DEG, deriv)
+    t_vec_eval = np.array(t_vec(t / alpha, DEG, deriv)) / alpha**deriv
     flat_outputs = []
     for i in range(N_COORDS):
         start_idx = i * N_COEFF
@@ -457,7 +444,9 @@ def get_flat_output(
     return flat_outputs
 
 
-def get_trajectory_minmax(c: cp.Variable, bound_times: List[float]):
+def get_trajectory_minmax(
+    c: cp.Variable, bound_times: List[float], alpha: float = 1.0
+) -> Tuple[float, float, float, float, float, float]:
     """
     Get the position, velocity, and acceleration minimum and maximum values.
 
@@ -473,6 +462,8 @@ def get_trajectory_minmax(c: cp.Variable, bound_times: List[float]):
     bound_times : List[float]
         A list of times that define the bounds of the polynomial segments. For k segments,
         there should be k+1 bound times.
+    alpha : float, optional
+        A scaling factor for the time vector. Default is 1.0.
 
     Returns
     -------
@@ -481,10 +472,11 @@ def get_trajectory_minmax(c: cp.Variable, bound_times: List[float]):
         (vx, vy, vz), and acceleration (ax, ay, az) across the trajectory.
 
     """
-    t = np.linspace(bound_times[0], bound_times[-1], 1000)
-    positions = np.array([get_flat_output(c, ti, bound_times, 0) for ti in t])
-    velocities = np.array([get_flat_output(c, ti, bound_times, 1) for ti in t])
-    accelerations = np.array([get_flat_output(c, ti, bound_times, 2) for ti in t])
+    # Check flat outputs every 1 ms
+    t = np.linspace(bound_times[0], bound_times[-1], int(alpha * 1000))
+    positions = np.array([get_flat_output(c, ti, bound_times, 0, alpha) for ti in t])
+    velocities = np.array([get_flat_output(c, ti, bound_times, 1, alpha) for ti in t])
+    accelerations = np.array([get_flat_output(c, ti, bound_times, 2, alpha) for ti in t])
     pos_min = np.min(positions, axis=0)
     pos_max = np.max(positions, axis=0)
     vel_min = np.min(velocities, axis=0)
@@ -498,6 +490,7 @@ def compute_trajectory(
     wps: List[float],
     vlim: np.ndarray = None,
     alim: np.ndarray = None,
+    alpha: float = 1.0,
     verbose: bool = False,
 ) -> Tuple[cp.Variable, List[float], float]:
     """
@@ -521,6 +514,8 @@ def compute_trajectory(
     alim : np.ndarray, optional
         A 2D array of shape (N_COORDS, 2) representing the acceleration limits for each \
         coordinate. If None, no acceleration limits are applied. Default is None.
+    alpha : float, optional
+        A scaling factor for the time vector to nondimensionalize the problem. Default is 1.0.
     verbose : bool, optional
         If True, prints additional information during the optimization process. Default is False.
 
@@ -537,47 +532,53 @@ def compute_trajectory(
     n_vars = (n_wps - 1) * N_COORDS * N_COEFF  # Number of variables
 
     wps_copy = copy.deepcopy(wps)
+    n_solve_iters = 500_000
+
+    # --- Decision variables ---
+    c = cp.Variable(n_vars)
+
+    # --- Objective function ---
+    H = np.zeros((n_vars, n_vars))
+    for i in range(n_wps - 1):
+        t1 = wps_copy[i][0]
+        t2 = wps_copy[i + 1][0]
+        H_block = snap_cost_block_xyz(t1, t2)
+        start_idx = i * N_COORDS * N_COEFF
+        end_idx = start_idx + N_COORDS * N_COEFF
+        H[start_idx:end_idx, start_idx:end_idx] = H_block
+
+    # Scale the cost matrix to account for the time scaling
+    H /= alpha ** (2 * K_R - 1)
+
+    # Ensure H is positive semidefinite
+    H = cp.psd_wrap(H)
+
+    cost = cp.quad_form(c, H)
+    objective = cp.Minimize(cost)
+
+    # --- Define the constraints ---
+    A1, b1 = create_equality_constraints(wps_copy)
+    constraints = [A1 @ c == b1]
+    # if vlim is not None and alim is not None:
+    #     A2, b2 = create_inequality_constraints(wps_copy, vlim, alim)
+    #     constraints.append(A2 @ c <= b2)
+
+    # --- Problem definition ---
+    problem = cp.Problem(objective, constraints)
+
+    # --- Solve the problem ---
+    try:
+        problem.solve(max_iters=n_solve_iters, solver=cp.SCS, verbose=verbose)
+    except cp.SolverError as e:
+        if verbose:
+            print(f"Solver error: {e}")
+        return
+
+    # --- Ensure trajectory limits ---
+    alpha_inc_factor = 1.3
     while True:
-        # --- Decision variables ---
-        c = cp.Variable(n_vars)
+        bound_times = [wp[0] * alpha for wp in wps_copy]
 
-        # --- Objective function ---
-        H = np.zeros((n_vars, n_vars))
-        for i in range(n_wps - 1):
-            t1 = wps_copy[i][0]
-            t2 = wps_copy[i + 1][0]
-            H_block = snap_cost_block_xyz(t1, t2)
-            start_idx = i * N_COORDS * N_COEFF
-            end_idx = start_idx + N_COORDS * N_COEFF
-            H[start_idx:end_idx, start_idx:end_idx] = H_block
-        H = cp.psd_wrap(H)  # Ensure H is positive semidefinite
-        cost = cp.quad_form(c, H)
-        objective = cp.Minimize(cost)
-
-        # --- Define the constraints ---
-        A1, b1 = create_equality_constraints(wps_copy)
-        constraints = [A1 @ c == b1]
-        if vlim is not None and alim is not None:
-            A2, b2 = create_inequality_constraints(wps_copy, vlim, alim)
-            constraints.append(A2 @ c <= b2)
-
-        # --- Problem definition ---
-        problem = cp.Problem(objective, constraints)
-
-        # --- Solve the problem ---
-        problem.solve(max_iter=20000, verbose=verbose)
-
-        # --- Output the results ---
-        if verbose:
-            print("Optimal coefficients:", c.value)
-            print("Optimal cost:", problem.value)
-
-        # --- Get time bounds for the trajectory ---
-        bound_times = [wp[0] for wp in wps_copy]
-        if verbose:
-            print("Bound times:", bound_times)
-
-        # --- Ensure trajectory limits ---
         if vlim is None:
             vlim = np.concat(
                 (np.ones((N_COORDS, 1)) * (-np.inf), np.ones((N_COORDS, 1)) * np.inf),
@@ -589,10 +590,10 @@ def compute_trajectory(
                 axis=1,
             )
         pos_min, pos_max, vel_min, vel_max, acc_min, acc_max = get_trajectory_minmax(
-            c, bound_times
+            c, bound_times, alpha
         )
         if verbose:
-            print("Trajectory limits:")
+            print(f"--- Trajectory limits (alpha {alpha}) ---")
             print("Position min:", pos_min)
             print("Position max:", pos_max)
             print("Velocity min:", vel_min)
@@ -610,25 +611,44 @@ def compute_trajectory(
             break
 
         if verbose:
-            print(
-                "Trajectory limits not satisfied. Adjusting waypoints and retrying..."
-            )
+            print("Trajectory limits not satisfied. Adjusting waypoints and retrying...")
 
-        # If limits are not satisfied, adjust the waypoints
-        for i in range(len(wps_copy)):
-            wps_copy[i][0] *= 1.3  # Increase time to allow for more flexibility
+        # If limits are not satisfied, increase the time scale
+        alpha *= alpha_inc_factor
 
-    return c, bound_times, problem.value
+    return c, alpha, problem.value
 
 
-if __name__ == "__main__":
+def main():
+    """Perform a test run of the minimum snap trajectory generation."""
     # --- Define the waypoints ---
+    # wps = [
+    #     [0.0, 0.0, 0.0, 0.0, 0.0],  # Initial waypoint (t, x, y, z, yaw)
+    #     [1.0, 1.0, 1.0, 2.0, -np.pi / 2],  # Second waypoint (t, x, y, z, yaw)
+    #     [2.0, 2.0, 0.0, 3.0, -np.pi / 6],  # Third waypoint (t, x, y, z, yaw)
+    #     [3.0, 1.0, -1.0, 1.0, np.pi / 3],  # Fourth waypoint (t, x, y, z, yaw)
+    #     [4.0, -1.0, -1.0, 1.0, 0.0],  # Fifth waypoint (t, x, y, z, yaw)
+    # ]
+
     wps = [
-        [0.0, 0.0, 0.0, 0.0, 0.0],  # Initial waypoint (t, x, y, z, yaw)
-        [1.0, 1.0, 1.0, 2.0, -np.pi / 2],  # Second waypoint (t, x, y, z, yaw)
-        [2.0, 2.0, 0.0, 3.0, -np.pi / 6],  # Third waypoint (t, x, y, z, yaw)
-        [3.0, 1.0, -1.0, 1.0, np.pi / 3],  # Fourth waypoint (t, x, y, z, yaw)
-        [4.0, -1.0, -1.0, 1.0, 0.0],  # Fifth waypoint (t, x, y, z, yaw)
+        [0.0, 0.0, 0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0, -5.0, 0.0],
+        [3.0, 0.0, -1.0, -5.0, 0.0],
+        [4.0, 0.0, -2.0, -5.0, 0.0],
+        [5.0, 0.0, -3.0, -5.0, 0.0],
+        [6.0, 0.0, -4.0, -5.0, 0.0],
+        [7.0, 1.0, -4.0, -5.0, 0.0],
+        [8.0, 2.0, -4.0, -5.0, 0.0],
+        [9.0, 3.0, -4.0, -5.0, 0.0],
+        [10.0, 4.0, -4.0, -5.0, 0.0],
+        [11.0, 4.0, -3.0, -5.0, 0.0],
+        [12.0, 4.0, -2.0, -5.0, 0.0],
+        [13.0, 4.0, -1.0, -5.0, 0.0],
+        [14.0, 4.0, 0.0, -5.0, 0.0],
+        [15.0, 3.0, 0.0, -5.0, 0.0],
+        [16.0, 2.0, 0.0, -5.0, 0.0],
+        [17.0, 1.0, 0.0, -5.0, 0.0],
+        [18.0, 0.0, 0.0, -5.0, 0.0],
     ]
 
     vlims = np.array(
@@ -648,15 +668,28 @@ if __name__ == "__main__":
         ]
     )
 
+    # --- Create a list of wps with nondimensional time ---
+    wps_nondim = copy.deepcopy(wps)
+    alpha = wps_nondim[-1][0]  # Scale factor for time
+    for i in range(len(wps_nondim)):
+        wps_nondim[i][0] /= alpha
+
     # --- Compute the trajectory ---
-    opt_coeffs, time_bounds, opt_val = compute_trajectory(wps, vlims, alims)
+    opt_coeffs, opt_end_time, opt_val = compute_trajectory(
+        wps_nondim, vlims, alims, alpha, verbose=True
+    )
 
     print("Optimal value:", opt_val)
+    print("Opt end time:", opt_end_time)
+
+    # --- Polynomial time bound ---
+    time_bounds = [wp[0] * opt_end_time for wp in wps_nondim]
+    print("Time bounds:", time_bounds)
 
     # # --- Plot the trajectory in 3D ---
-    # t_values = np.linspace(wps[0][0], wps[-1][0], 1000)
+    # t_values = np.linspace(time_bounds[0], time_bounds[-1], 1000)
     # trajectory = np.array(
-    #     [get_flat_output(opt_coeffs, t, [wp[0] for wp in wps]) for t in t_values]
+    #     [get_flat_output(opt_coeffs, t, time_bounds, alpha=opt_end_time) for t in t_values]
     # )
     # fig = plt.figure()
     # ax = fig.add_subplot(111, projection="3d")
@@ -670,10 +703,14 @@ if __name__ == "__main__":
     # fig2 = plt.figure()
     # ax2 = fig2.add_subplot(111)
     # ax2.plot(t_values, trajectory[:, 3], label="Yaw")
-    # ax2.plot([wp[0] for wp in wps], [wp[4] for wp in wps], "ro", label="Waypoints Yaw")
+    # ax2.plot(time_bounds, [wp[4] for wp in wps], "ro", label="Waypoints Yaw")
     # ax2.set_xlabel("Time")
     # ax2.set_ylabel("Yaw (rad)")
     # ax2.legend()
     # ax2.grid()
     # plt.tight_layout()
     # plt.show()
+
+
+if __name__ == "__main__":
+    main()

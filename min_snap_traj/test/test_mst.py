@@ -21,6 +21,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # -------------------------------------------------------------------------------
+import copy
+
 import min_snap_traj.mst as mst
 import cvxpy as cp
 import numpy as np
@@ -56,25 +58,40 @@ def test_t_vec_degs():
 def test_compute_trajectory_basic():
     """Test trajectory computation with no limits."""
     wps = [
-        [0.0, 0.0, 0.0, 0.0, 0.0],  # Initial waypoint (t, x, y, z, yaw)
-        [1.0, 1.0, 1.0, 2.0, -np.pi / 2],  # Second waypoint (t, x, y, z, yaw)
-        [2.0, 2.0, 0.0, 3.0, -np.pi / 6],  # Third waypoint (t, x, y, z, yaw)
-        [3.0, 1.0, -1.0, 1.0, np.pi / 3],  # Fourth waypoint (t, x, y, z, yaw)
-        [4.0, -1.0, -1.0, 1.0, 0.0],  # Fifth waypoint (t, x, y, z, yaw)
+        [0.0, 0.0, 0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0, -5.0, 0.0],
+        [3.0, 0.0, -1.0, -5.0, 0.0],
+        [4.0, 0.0, -2.0, -5.0, 0.0],
+        [5.0, 0.0, -3.0, -5.0, 0.0],
+        [6.0, 0.0, -4.0, -5.0, 0.0],
+        [7.0, 1.0, -4.0, -5.0, 0.0],
+        [8.0, 2.0, -4.0, -5.0, 0.0],
+        [9.0, 3.0, -4.0, -5.0, 0.0],
+        [10.0, 4.0, -4.0, -5.0, 0.0],
+        [11.0, 4.0, -3.0, -5.0, 0.0],
+        [12.0, 4.0, -2.0, -5.0, 0.0],
+        [13.0, 4.0, -1.0, -5.0, 0.0],
+        [14.0, 4.0, 0.0, -5.0, 0.0],
+        [15.0, 3.0, 0.0, -5.0, 0.0],
+        [16.0, 2.0, 0.0, -5.0, 0.0],
+        [17.0, 1.0, 0.0, -5.0, 0.0],
+        [18.0, 0.0, 0.0, -5.0, 0.0],
     ]
 
+    # Create time nondimensionalized waypoints
+    wps_nondim = copy.deepcopy(wps)
+    alpha = wps_nondim[-1][0]  # Scale factor for time
+    for i in range(len(wps_nondim)):
+        wps_nondim[i][0] /= alpha
+
     # Compute the trajectory
-    opt_c, bound_times, opt_val = mst.compute_trajectory(wps)
+    opt_c, opt_end_time, opt_val = mst.compute_trajectory(wps_nondim, alpha=alpha, verbose=False)
 
     # Check the optimized coefficients type
-    assert isinstance(
-        opt_c, cp.Variable
-    ), "Optimized coefficients should be a cvxpy Variable."
+    assert isinstance(opt_c, cp.Variable), "Optimized coefficients should be a cvxpy Variable."
 
-    # Bound times should match the waypoints
-    assert len(bound_times) == len(wps), "Bound times length should match waypoints."
-    for i, wp in enumerate(wps):
-        assert bound_times[i] == wp[0], f"Bound time {i} should match waypoint time."
+    # There should be no time scalling
+    assert opt_end_time == alpha, "Optimal end time should match the scale factor."
 
     # Optimal value should be a float and non-negative
     assert isinstance(opt_val, float), "Optimal value should be a float."
@@ -84,11 +101,24 @@ def test_compute_trajectory_basic():
 def test_compute_trajectory_with_limits():
     """Test trajectory computation with velocity and acceleration limits."""
     wps = [
-        [0.0, 0.0, 0.0, 0.0, 0.0],  # Initial waypoint (t, x, y, z, yaw)
-        [1.0, 1.0, 1.0, 2.0, -np.pi / 2],  # Second waypoint (t, x, y, z, yaw)
-        [2.0, 2.0, 0.0, 3.0, -np.pi / 6],  # Third waypoint (t, x, y, z, yaw)
-        [3.0, 1.0, -1.0, 1.0, np.pi / 3],  # Fourth waypoint (t, x, y, z, yaw)
-        [4.0, -1.0, -1.0, 1.0, 0.0],  # Fifth waypoint (t, x, y, z, yaw)
+        [0.0, 0.0, 0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0, -5.0, 0.0],
+        [3.0, 0.0, -1.0, -5.0, 0.0],
+        [4.0, 0.0, -2.0, -5.0, 0.0],
+        [5.0, 0.0, -3.0, -5.0, 0.0],
+        [6.0, 0.0, -4.0, -5.0, 0.0],
+        [7.0, 1.0, -4.0, -5.0, 0.0],
+        [8.0, 2.0, -4.0, -5.0, 0.0],
+        [9.0, 3.0, -4.0, -5.0, 0.0],
+        [10.0, 4.0, -4.0, -5.0, 0.0],
+        [11.0, 4.0, -3.0, -5.0, 0.0],
+        [12.0, 4.0, -2.0, -5.0, 0.0],
+        [13.0, 4.0, -1.0, -5.0, 0.0],
+        [14.0, 4.0, 0.0, -5.0, 0.0],
+        [15.0, 3.0, 0.0, -5.0, 0.0],
+        [16.0, 2.0, 0.0, -5.0, 0.0],
+        [17.0, 1.0, 0.0, -5.0, 0.0],
+        [18.0, 0.0, 0.0, -5.0, 0.0],
     ]
 
     vlim = np.array(
@@ -108,25 +138,29 @@ def test_compute_trajectory_with_limits():
         ]
     )
 
+    # Create time nondimensionalized waypoints
+    wps_nondim = copy.deepcopy(wps)
+    alpha = wps_nondim[-1][0]  # Scale factor for time
+    for i in range(len(wps_nondim)):
+        wps_nondim[i][0] /= alpha
+
     # Compute the trajectory
-    opt_c, bound_times, opt_val = mst.compute_trajectory(wps, vlim=vlim, alim=alim)
+    opt_c, opt_end_time, opt_val = mst.compute_trajectory(
+        wps_nondim, vlim=vlim, alim=alim, alpha=alpha, verbose=True
+    )
 
     # Check the optimized coefficients type
-    assert isinstance(
-        opt_c, cp.Variable
-    ), "Optimized coefficients should be a cvxpy Variable."
-
-    # Bound times should match the waypoints
-    assert len(bound_times) == len(wps), "Bound times length should match waypoints."
+    assert isinstance(opt_c, cp.Variable), "Optimized coefficients should be a cvxpy Variable."
 
     # Optimal value should be a float and non-negative
     assert isinstance(opt_val, float), "Optimal value should be a float."
     assert opt_val >= 0, "Optimal value should be non-negative."
 
     # Check if the velocity and acceleration limits are satisfied in the internal waypoints
+    bound_times = [wp[0] * opt_end_time for wp in wps_nondim]
     for i in range(1, len(bound_times) - 1):
-        flat_output_t_d1 = mst.get_flat_output(opt_c, bound_times[i], bound_times, 1)
-        flat_output_t_d2 = mst.get_flat_output(opt_c, bound_times[i], bound_times, 2)
+        flat_output_t_d1 = mst.get_flat_output(opt_c, bound_times[i], bound_times, 1, opt_end_time)
+        flat_output_t_d2 = mst.get_flat_output(opt_c, bound_times[i], bound_times, 2, opt_end_time)
 
         # Check velocity limits
         limit_tol = 1e-4  # Tolerance for floating-point comparison
@@ -143,7 +177,7 @@ def test_compute_trajectory_with_limits():
 
     # Check if the velocity and acceleration limits are satisfied in the whole trajectory
     _, _, vel_min, vel_max, acc_min, acc_max = mst.get_trajectory_minmax(
-        opt_c, bound_times
+        opt_c, bound_times, opt_end_time
     )
     assert np.all(
         vel_min + limit_tol >= vlim[:, 0]

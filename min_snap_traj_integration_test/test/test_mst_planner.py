@@ -29,8 +29,6 @@ import launch_testing.actions
 import launch_testing.asserts
 import rclpy
 
-import numpy as np
-
 from min_snap_traj_msgs.msg import FlatOutput, Waypoint
 from min_snap_traj_msgs.srv import GetFlatOutput, SetTrajectory
 
@@ -62,21 +60,13 @@ class TestMSTPlanner(unittest.TestCase):
 
     def test_set_trajectory_available(self):
         """Test if the SetTrajectory service is available."""
-        service = self.test_node.create_client(
-            SetTrajectory, "mst_planner/set_trajectory"
-        )
-        self.assertTrue(
-            service.wait_for_service(timeout_sec=5), "Service not available"
-        )
+        service = self.test_node.create_client(SetTrajectory, "mst_planner/set_trajectory")
+        self.assertTrue(service.wait_for_service(timeout_sec=5), "Service not available")
 
     def test_get_flat_output_available(self):
         """Test if the get_flat_output_callback service is available."""
-        service = self.test_node.create_client(
-            GetFlatOutput, "mst_planner/get_flat_output"
-        )
-        self.assertTrue(
-            service.wait_for_service(timeout_sec=5), "Service not available"
-        )
+        service = self.test_node.create_client(GetFlatOutput, "mst_planner/get_flat_output")
+        self.assertTrue(service.wait_for_service(timeout_sec=5), "Service not available")
 
     def test_trajectory_pipeline(self):
         """Test the Trajectory pipeline."""
@@ -90,12 +80,32 @@ class TestMSTPlanner(unittest.TestCase):
 
         # Create a request for setting the trajectory
         request = SetTrajectory.Request()
+        # request.waypoints = [
+        #     Waypoint(timestamp=0.0, x=0.0, y=0.0, z=0.0, yaw=0.0),
+        #     Waypoint(timestamp=1.0, x=1.0, y=1.0, z=2.0, yaw=-np.pi / 2),
+        #     Waypoint(timestamp=2.0, x=2.0, y=0.0, z=3.0, yaw=-np.pi / 6),
+        #     Waypoint(timestamp=3.0, x=1.0, y=-1.0, z=1.0, yaw=np.pi / 3),
+        #     Waypoint(timestamp=4.0, x=-1.0, y=-1.0, z=1.0, yaw=0.0),
+        # ]
         request.waypoints = [
             Waypoint(timestamp=0.0, x=0.0, y=0.0, z=0.0, yaw=0.0),
-            Waypoint(timestamp=1.0, x=1.0, y=1.0, z=2.0, yaw=-np.pi / 2),
-            Waypoint(timestamp=2.0, x=2.0, y=0.0, z=3.0, yaw=-np.pi / 6),
-            Waypoint(timestamp=3.0, x=1.0, y=-1.0, z=1.0, yaw=np.pi / 3),
-            Waypoint(timestamp=4.0, x=-1.0, y=-1.0, z=1.0, yaw=0.0),
+            Waypoint(timestamp=2.0, x=0.0, y=0.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=3.0, x=0.0, y=-1.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=4.0, x=0.0, y=-2.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=5.0, x=0.0, y=-3.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=6.0, x=0.0, y=-4.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=7.0, x=1.0, y=-4.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=8.0, x=2.0, y=-4.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=9.0, x=3.0, y=-4.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=10.0, x=4.0, y=-4.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=11.0, x=4.0, y=-3.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=12.0, x=4.0, y=-2.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=13.0, x=4.0, y=-1.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=14.0, x=4.0, y=0.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=15.0, x=3.0, y=0.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=16.0, x=2.0, y=0.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=17.0, x=1.0, y=0.0, z=-5.0, yaw=0.0),
+            Waypoint(timestamp=18.0, x=0.0, y=0.0, z=-5.0, yaw=0.0),
         ]
 
         # Send the request to set the trajectory
@@ -120,9 +130,7 @@ class TestMSTPlanner(unittest.TestCase):
         self.test_node.create_subscription(
             FlatOutput,
             trajectory_topic,
-            lambda msg: self.assertIsNotNone(
-                msg, "Received trajectory should not be None"
-            ),
+            lambda msg: self.assertIsNotNone(msg, "Received trajectory should not be None"),
             10,
         )
 
@@ -153,7 +161,7 @@ class TestMSTPlanner(unittest.TestCase):
         rclpy.spin_until_future_complete(self.test_node, future)
         self.assertGreaterEqual(
             future.result().flat_output.timestamp,
-            1.0,
+            0.0,
             "Service should succeed with valid time",
         )
         self.assertIsNotNone(
@@ -225,8 +233,6 @@ def generate_test_description():
                 name="mst_planner",
                 output="screen",
             ),
-            launch.actions.TimerAction(
-                period=0.5, actions=[launch_testing.actions.ReadyToTest()]
-            ),
+            launch.actions.TimerAction(period=0.5, actions=[launch_testing.actions.ReadyToTest()]),
         ],
     )

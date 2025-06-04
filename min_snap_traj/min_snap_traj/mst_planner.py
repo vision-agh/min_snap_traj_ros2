@@ -62,6 +62,7 @@ class MSTPlanner(Node):
         self.opt_poly_coeffs: cp.Variable | None = None
         self.time_knots: List[float] | None = None
         self.current_time: float = 0.0
+        self.traj_duration: float | None = None
 
         # Topics
         self._trajectory_publisher = self.create_publisher(
@@ -195,13 +196,13 @@ class MSTPlanner(Node):
 
         # Compute the flat output at the given time
         flat_output = get_flat_output(
-            self.opt_poly_coeffs, time, self.time_knots, deriv=0
+            self.opt_poly_coeffs, time, self.time_knots, deriv=0, alpha=self.duration
         )
         flat_output_d1 = get_flat_output(
-            self.opt_poly_coeffs, time, self.time_knots, deriv=1
+            self.opt_poly_coeffs, time, self.time_knots, deriv=1, alpha=self.duration
         )
         flat_output_d2 = get_flat_output(
-            self.opt_poly_coeffs, time, self.time_knots, deriv=2
+            self.opt_poly_coeffs, time, self.time_knots, deriv=2, alpha=self.duration
         )
 
         # Create FlatOutput message
@@ -239,19 +240,26 @@ class MSTPlanner(Node):
             waypoints.append([wp.timestamp, wp.x, wp.y, wp.z, wp.yaw])
 
         try:
-            self.opt_poly_coeffs, self.time_knots, opt_val = compute_trajectory(
-                waypoints, self.vlims, self.alims
+            nondim_waypoints = []
+            for wp in waypoints:
+                nondim_waypoints.append([wp[0] / waypoints[-1][0], wp[1], wp[2], wp[3], wp[4]])
+            self.opt_poly_coeffs, self.duration, opt_val = compute_trajectory(
+                nondim_waypoints,
+                self.vlims,
+                self.alims,
+                waypoints[-1][0],
+                verbose=True,
             )
         except cp.SolverError as e:
             self.get_logger().error(
-                f"SolverError while computing trajectory: {e}. "
-                "Returning empty trajectory."
+                f"SolverError while computing trajectory: {e}. " "Returning empty trajectory."
             )
             response.duration = -1.0
             return response
+        self.time_knots = [wp[0] * self.duration for wp in nondim_waypoints]
         self.get_logger().info(f"Trajectory set with optimal value: {opt_val:.4f}")
         self.get_logger().debug(f"Time knots: {self.time_knots}")
-        response.duration = self.time_knots[-1] - self.time_knots[0]
+        response.duration = self.duration
 
         self.current_time = 0.0
 
@@ -275,8 +283,7 @@ class MSTPlanner(Node):
         flat_output_msg = self._read_flat_output(self.current_time)
         if flat_output_msg.timestamp < 0:
             self.get_logger().warning(
-                f"Flat output at time {self.current_time} is invalid. "
-                "Skipping publishing."
+                f"Flat output at time {self.current_time} is invalid. " "Skipping publishing."
             )
             return
 
@@ -298,9 +305,7 @@ def main(args=None):
     try:
         rclpy.spin(planner)
     except KeyboardInterrupt:
-        planner.get_logger().info(
-            "Keyboard interrupt received, shutting down MST Planner node."
-        )
+        planner.get_logger().info("Keyboard interrupt received, shutting down MST Planner node.")
     finally:
         planner.destroy_node()
 
