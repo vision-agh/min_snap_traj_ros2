@@ -6,7 +6,7 @@ It was built and tested on Ubuntu 22.04 with ROS 2 Humble.
 ## How to use it
 
 Clone repository into your ROS 2 workspace and build as usual.
-To validate the package, you can invoke set of tests with the `colcon test` command (see the official [ROS2 documentation](https://docs.ros.org/en/humble/Tutorials/Intermediate/Testing/CLI.html) for more details).
+To validate the package, you can invoke set of tests with the `colcon test` command (see the official [ROS 2 documentation](https://docs.ros.org/en/humble/Tutorials/Intermediate/Testing/CLI.html) for more details).
 
 ### min_snap_traj
 
@@ -29,4 +29,4 @@ Just definitions of messages and services that are used in the main package.
 
 ### min_snap_traj_integration_test
 
-This package uses the approach [described](https://docs.ros.org/en/humble/Tutorials/Intermediate/Testing/Integration.html) in the official ROS2 documentation to provide integration tests for the main package.
+This package uses the approach [described](https://docs.ros.org/en/humble/Tutorials/Intermediate/Testing/Integration.html) in the official ROS 2 documentation to provide integration tests for the main package.
