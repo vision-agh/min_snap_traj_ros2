@@ -238,9 +238,17 @@ class MSTPlanner(Node):
         for wp in request.waypoints:
             waypoints.append([wp.timestamp, wp.x, wp.y, wp.z, wp.yaw])
 
-        self.opt_poly_coeffs, self.time_knots, opt_val = compute_trajectory(
-            waypoints, self.vlims, self.alims
-        )
+        try:
+            self.opt_poly_coeffs, self.time_knots, opt_val = compute_trajectory(
+                waypoints, self.vlims, self.alims
+            )
+        except cp.SolverError as e:
+            self.get_logger().error(
+                f"SolverError while computing trajectory: {e}. "
+                "Returning empty trajectory."
+            )
+            response.duration = -1.0
+            return response
         self.get_logger().info(f"Trajectory set with optimal value: {opt_val:.4f}")
         self.get_logger().debug(f"Time knots: {self.time_knots}")
         response.duration = self.time_knots[-1] - self.time_knots[0]
