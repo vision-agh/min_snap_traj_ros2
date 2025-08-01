@@ -191,3 +191,40 @@ def test_compute_trajectory_with_limits():
     assert np.all(
         acc_max - limit_tol <= alim[:, 1]
     ), "Maximum acceleration should satisfy upper limit."
+
+
+def test_get_flat_output():
+    """Test the get_flat_output function."""
+    wps = [
+        [0.0, 0.0, 0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0, -5.0, 0.0],
+        [3.0, 0.0, -1.0, -5.0, 0.0],
+        [4.0, 0.0, -2.0, -5.0, 0.0],
+        [5.0, 0.0, -3.0, -5.0, 0.0],
+    ]
+
+    # Create time nondimensionalized waypoints
+    wps_nondim = copy.deepcopy(wps)
+    alpha = wps_nondim[-1][0]  # Scale factor for time
+    for i in range(len(wps_nondim)):
+        wps_nondim[i][0] /= alpha
+
+    # Compute the trajectory
+    opt_c, opt_end_time, _ = mst.compute_trajectory(wps_nondim, alpha=alpha)
+
+    # Scale time bounds according to the optimal end time
+    bound_times = [wp[0] * opt_end_time for wp in wps_nondim]
+
+    # Test for different derivatives
+    for t in bound_times:
+        for deriv in range(4):
+            flat_output = mst.get_flat_output(opt_c, t, bound_times, deriv, opt_end_time)
+            assert isinstance(
+                flat_output, list
+            ), f"Flat output should be a list for deriv={deriv}."
+            assert (
+                len(flat_output) == len(wps_nondim[0]) - 1
+            ), f"Flat output length should match number of dimensions for deriv={deriv}."
+            assert all(
+                isinstance(val, float) for val in flat_output
+            ), f"All elements in flat output should be floats for deriv={deriv}."

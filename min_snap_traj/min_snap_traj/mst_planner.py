@@ -107,7 +107,9 @@ class MSTPlanner(Node):
                 f"vx={response.flat_output.vx:.2f}, vy={response.flat_output.vy:.2f}, "
                 f"vz={response.flat_output.vz:.2f}, yaw_rate={response.flat_output.yaw_rate:.2f}, "
                 f"ax={response.flat_output.ax:.2f}, ay={response.flat_output.ay:.2f}, "
-                f"az={response.flat_output.az:.2f}, yaw_accel={response.flat_output.yaw_accel:.2f}"
+                f"az={response.flat_output.az:.2f}, yaw_acc={response.flat_output.yaw_accel:.2f}, "
+                f" jx={response.flat_output.jx:.2f}, jy={response.flat_output.jy:.2f}, "
+                f"jz={response.flat_output.jz:.2f}, yaw_jerk={response.flat_output.yaw_jerk:.2f}"
             )
 
         return response
@@ -204,6 +206,9 @@ class MSTPlanner(Node):
         flat_output_d2 = get_flat_output(
             self.opt_poly_coeffs, time, self.time_knots, deriv=2, alpha=self.duration
         )
+        flat_output_d3 = get_flat_output(
+            self.opt_poly_coeffs, time, self.time_knots, deriv=3, alpha=self.duration
+        )
 
         # Create FlatOutput message
         flat_output_msg = FlatOutput()
@@ -220,6 +225,10 @@ class MSTPlanner(Node):
         flat_output_msg.ay = flat_output_d2[1]
         flat_output_msg.az = flat_output_d2[2]
         flat_output_msg.yaw_accel = flat_output_d2[3]
+        flat_output_msg.jx = flat_output_d3[0]
+        flat_output_msg.jy = flat_output_d3[1]
+        flat_output_msg.jz = flat_output_d3[2]
+        flat_output_msg.yaw_jerk = flat_output_d3[3]
 
         return flat_output_msg
 

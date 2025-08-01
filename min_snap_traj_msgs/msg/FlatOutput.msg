@@ -16,3 +16,8 @@ float64 ax
 float64 ay
 float64 az
 float64 yaw_accel
+
+float64 jx
+float64 jy
+float64 jz
+float64 yaw_jerk
