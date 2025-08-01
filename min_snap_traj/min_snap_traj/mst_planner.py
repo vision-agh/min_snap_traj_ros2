@@ -56,6 +56,7 @@ class MSTPlanner(Node):
     """
 
     def __init__(self):
+        """Initialize the MSTPlanner node."""
         super().__init__("mst_planner")
         self._load_params()
 
@@ -257,7 +258,7 @@ class MSTPlanner(Node):
                 self.vlims,
                 self.alims,
                 waypoints[-1][0],
-                verbose=True,
+                verbose=False,
             )
         except cp.SolverError as e:
             self.get_logger().error(
