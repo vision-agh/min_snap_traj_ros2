@@ -23,6 +23,8 @@
 # -------------------------------------------------------------------------------
 import unittest
 
+import numpy as np
+
 import launch
 import launch_ros
 import launch_testing.actions
@@ -30,7 +32,7 @@ import launch_testing.asserts
 import rclpy
 
 from min_snap_traj_msgs.msg import FlatOutput, Waypoint
-from min_snap_traj_msgs.srv import GetFlatOutput, SetTrajectory
+from min_snap_traj_msgs.srv import GetFlatOutput, GetFlatOutputSequence, SetTrajectory
 
 
 class TestMSTPlanner(unittest.TestCase):
@@ -66,6 +68,13 @@ class TestMSTPlanner(unittest.TestCase):
     def test_get_flat_output_available(self):
         """Test if the get_flat_output_callback service is available."""
         service = self.test_node.create_client(GetFlatOutput, "mst_planner/get_flat_output")
+        self.assertTrue(service.wait_for_service(timeout_sec=5), "Service not available")
+
+    def test_get_flat_output_sequence_available(self):
+        """Test if the get_flat_output_sequence_callback service is available."""
+        service = self.test_node.create_client(
+            GetFlatOutputSequence, "mst_planner/get_flat_output_sequence"
+        )
         self.assertTrue(service.wait_for_service(timeout_sec=5), "Service not available")
 
     def test_trajectory_pipeline(self):
@@ -113,7 +122,8 @@ class TestMSTPlanner(unittest.TestCase):
         rclpy.spin_until_future_complete(self.test_node, future)
 
         # Check if the trajectory was set successfully
-        self.assertGreaterEqual(future.result().duration, 0.0)
+        traj_duration = future.result().duration
+        self.assertGreaterEqual(traj_duration, 0.0)
 
         # Another request for setting the trajectory should fail
         request.waypoints = [
@@ -212,6 +222,79 @@ class TestMSTPlanner(unittest.TestCase):
             future.result().flat_output.yaw_accel,
             "Flat trajectory yaw_accel should not be None",
         )
+        self.assertIsNotNone(
+            future.result().flat_output.jx,
+            "Flat trajectory jx should not be None",
+        )
+        self.assertIsNotNone(
+            future.result().flat_output.jy,
+            "Flat trajectory jy should not be None",
+        )
+        self.assertIsNotNone(
+            future.result().flat_output.jz,
+            "Flat trajectory jz should not be None",
+        )
+        self.assertIsNotNone(
+            future.result().flat_output.yaw_jerk,
+            "Flat trajectory yaw_jerk should not be None",
+        )
+
+        # Check if it is possible to get the flat output sequence via the service
+        get_flat_output_sequence_service = self.test_node.create_client(
+            GetFlatOutputSequence, "mst_planner/get_flat_output_sequence"
+        )
+        self.assertTrue(
+            get_flat_output_sequence_service.wait_for_service(timeout_sec=5),
+            "Service not available",
+        )
+
+        # Check bad request handling for get_flat_output_sequence_service
+        get_flat_output_sequence_request = GetFlatOutputSequence.Request()
+        get_flat_output_sequence_request.times = [-1.0, 0.0, 1.0]
+        future = get_flat_output_sequence_service.call_async(get_flat_output_sequence_request)
+        rclpy.spin_until_future_complete(self.test_node, future)
+
+        self.assertEqual(
+            len(future.result().flat_outputs),
+            2,
+            "Service should not succeed with negative time in sequence",
+        )
+
+        # Check valid request handling for get_flat_output_sequence_service
+        get_flat_output_sequence_request = GetFlatOutputSequence.Request()
+        n_points = 10
+        get_flat_output_sequence_request.times = np.linspace(0.0, traj_duration, n_points).tolist()
+        future = get_flat_output_sequence_service.call_async(get_flat_output_sequence_request)
+        rclpy.spin_until_future_complete(self.test_node, future)
+
+        self.assertEqual(
+            len(future.result().flat_outputs),
+            n_points,
+            "Service should return flat outputs for all requested times",
+        )
+
+        for flat_output in future.result().flat_outputs:
+            self.assertGreaterEqual(
+                flat_output.timestamp,
+                0.0,
+                "Flat output timestamp should be non-negative",
+            )
+            self.assertIsNotNone(flat_output.x, "Flat output x should not be None")
+            self.assertIsNotNone(flat_output.y, "Flat output y should not be None")
+            self.assertIsNotNone(flat_output.z, "Flat output z should not be None")
+            self.assertIsNotNone(flat_output.yaw, "Flat output yaw should not be None")
+            self.assertIsNotNone(flat_output.vx, "Flat output vx should not be None")
+            self.assertIsNotNone(flat_output.vy, "Flat output vy should not be None")
+            self.assertIsNotNone(flat_output.vz, "Flat output vz should not be None")
+            self.assertIsNotNone(flat_output.yaw_rate, "Flat output yaw_rate should not be None")
+            self.assertIsNotNone(flat_output.ax, "Flat output ax should not be None")
+            self.assertIsNotNone(flat_output.ay, "Flat output ay should not be None")
+            self.assertIsNotNone(flat_output.az, "Flat output az should not be None")
+            self.assertIsNotNone(flat_output.yaw_accel, "Flat output yaw_accel should not be None")
+            self.assertIsNotNone(flat_output.jx, "Flat output jx should not be None")
+            self.assertIsNotNone(flat_output.jy, "Flat output jy should not be None")
+            self.assertIsNotNone(flat_output.jz, "Flat output jz should not be None")
+            self.assertIsNotNone(flat_output.yaw_jerk, "Flat output yaw_jerk should not be None")
 
 
 @launch_testing.post_shutdown_test()

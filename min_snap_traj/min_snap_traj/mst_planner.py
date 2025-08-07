@@ -35,7 +35,7 @@ import numpy as np
 from min_snap_traj.mst import compute_trajectory, get_flat_output
 
 from min_snap_traj_msgs.msg import FlatOutput, Waypoint
-from min_snap_traj_msgs.srv import GetFlatOutput, SetTrajectory
+from min_snap_traj_msgs.srv import GetFlatOutput, GetFlatOutputSequence, SetTrajectory
 
 
 class MSTPlanner(Node):
@@ -47,7 +47,8 @@ class MSTPlanner(Node):
     1. Set a trajectory using the `SetTrajectory` service.
     2. Read the flat output published periodically on the `mst_planner/trajectory` topic.
     Additionally, the node provides a service to get the flat output at a specific time
-    using the `GetFlatOutput` service.
+    using the `GetFlatOutput` service or a sequence of times using the `GetFlatOutputSequence`
+    service.
     The flat output includes position, velocity, acceleration, and yaw information
     at the requested time, computed from the polynomial coefficients of the trajectory, with
     its derivatives up to the second order. It is possible to adjust the parameters via the
@@ -77,6 +78,12 @@ class MSTPlanner(Node):
             GetFlatOutput,
             "mst_planner/get_flat_output",
             self._get_flat_output_callback,
+        )
+
+        self._get_flat_output_sequence_srv = self.create_service(
+            GetFlatOutputSequence,
+            "mst_planner/get_flat_output_sequence",
+            self._get_flat_output_sequence_callback,
         )
 
         self._set_trajectory_srv = self.create_service(
@@ -112,6 +119,41 @@ class MSTPlanner(Node):
                 f" jx={response.flat_output.jx:.2f}, jy={response.flat_output.jy:.2f}, "
                 f"jz={response.flat_output.jz:.2f}, yaw_jerk={response.flat_output.yaw_jerk:.2f}"
             )
+
+        return response
+
+    def _get_flat_output_sequence_callback(self, request, response):
+        """Return the flat output at the requested sequence of times."""
+        self.get_logger().debug("Received GetFlatOutputSequence request.")
+
+        if not self.opt_poly_coeffs or not self.time_knots:
+            self.get_logger().warning("No trajectory set. Cannot get flat output sequence.")
+            response.flat_outputs = []
+            return response
+
+        for time in request.times:
+            if time < self.time_knots[0] or time > self.time_knots[-1]:
+                self.get_logger().warning(
+                    f"Requested time {time} is out of bounds "
+                    f"[{self.time_knots[0]}, {self.time_knots[-1]}]. Skipping."
+                )
+                continue
+            flat_output = self._read_flat_output(time)
+            if flat_output.timestamp >= 0:
+                response.flat_outputs.append(flat_output)
+                self.get_logger().debug(
+                    f"Flat output at time {flat_output.timestamp}: "
+                    f"x={flat_output.x:.2f}, y={flat_output.y:.2f}, "
+                    f"z={flat_output.z:.2f}, yaw={flat_output.yaw:.2f}, "
+                    f"vx={flat_output.vx:.2f}, vy={flat_output.vy:.2f}, "
+                    f"vz={flat_output.vz:.2f}, yaw_rate={flat_output.yaw_rate:.2f}, "
+                    f"ax={flat_output.ax:.2f}, ay={flat_output.ay:.2f}, "
+                    f"az={flat_output.az:.2f}, yaw_acc={flat_output.yaw_accel:.2f}, "
+                    f"jx={flat_output.jx:.2f}, jy={flat_output.jy:.2f}, "
+                    f"jz={flat_output.jz:.2f}, yaw_jerk={flat_output.yaw_jerk:.2f}"
+                )
+            else:
+                self.get_logger().warning(f"Flat output at time {time} is invalid.")
 
         return response
 

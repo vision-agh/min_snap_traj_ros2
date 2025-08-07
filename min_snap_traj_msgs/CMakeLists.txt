@@ -24,6 +24,7 @@ set(msg_files
 set(srv_files
   "srv/SetTrajectory.srv"
   "srv/GetFlatOutput.srv"
+  "srv/GetFlatOutputSequence.srv"
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}

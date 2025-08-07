@@ -1,0 +1,5 @@
+# Get sequence of flat outputs at given times
+
+float64[] times
+---
+min_snap_traj_msgs/FlatOutput[] flat_outputs
